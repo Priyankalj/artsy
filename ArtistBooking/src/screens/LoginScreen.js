@@ -13,11 +13,16 @@ import {
   InputAccessoryView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { requestOtp } from '../auth/authService';
 import { validatePhone } from '../utils/validation';
 import { customToast } from '../utils/toast';
+import {
+  RESEND_OTP_SECONDS,
+  SHOW_OTP_ON_SCREEN,
+} from '../../config';
 
 const { height } = Dimensions.get('window');
 const PHONE_INPUT_ACCESSORY_ID = 'loginPhoneInput';
@@ -54,8 +59,8 @@ const LoginScreen = ({ navigation }) => {
 
     navigation.navigate('Otp', {
       phone: result.phone,
-      otp: result.otp,
-      retryAfterSeconds: result.retryAfterSeconds ?? 30,
+      otp: SHOW_OTP_ON_SCREEN ? result.otp : undefined,
+      retryAfterSeconds: result.retryAfterSeconds ?? RESEND_OTP_SECONDS,
     });
   };
 
@@ -70,12 +75,14 @@ const LoginScreen = ({ navigation }) => {
         <View style={styles.circleRight} />
 
         <View style={styles.logoContainer}>
-          <Text style={styles.logoA}>A</Text>
-          <View style={styles.star1} />
-          <View style={styles.star2} />
+          <Image
+            source={require('../../assets/artsy-logo.png')}
+            style={styles.logoImage}
+            resizeMode="cover"
+          />
         </View>
 
-        <Text style={styles.brand}>Artsy ✨</Text>
+        <Text style={styles.brand}>Artsy</Text>
         <Text style={styles.tagline}>Discover & Book Amazing Artists</Text>
         <Text style={styles.subTagline}>
           Singers • DJs • Dancers • Anchors • Painters
@@ -216,34 +223,14 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 90,
     height: 90,
-    borderRadius: 28,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 26,
+    overflow: 'hidden',
+    backgroundColor: '#7157FF',
     marginBottom: 18,
   },
-  logoA: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: '#7C5CFF',
-  },
-  star1: {
-    position: 'absolute',
-    top: 18,
-    right: 15,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#7C5CFF',
-  },
-  star2: {
-    position: 'absolute',
-    top: 28,
-    right: 28,
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#7C5CFF',
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   brand: {
     color: '#FFF',

@@ -6,3 +6,4 @@ logs/
 uploads/
 .vscode
 *.log
+firebaseadmin/*.json

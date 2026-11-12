@@ -14,7 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { fetchEarningsApi } from '../api/artists';
 import { fetchMyBookingsApi } from '../api/bookings';
 import { formatINR } from '../utils/artistMapper';
-import { colors } from '../theme/colors';
+import { customToast } from '../utils/toast';
+import { ARTIST_STEP_INDEX } from '../constants/onboarding';
 
 export default function EarningsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -158,17 +159,44 @@ export default function EarningsScreen({ navigation }) {
         </Text>
         <View style={styles.actionsGrid}>
           {[
-            { label: 'Update Availability', icon: '📅', bg: '#EFF6FF' },
-            { label: 'Edit Portfolio', icon: '🖼️', bg: '#F5F3FF' },
-            { label: 'View Bookings', icon: '📅', bg: '#FFFBEB', route: 'Bookings' },
-            { label: 'Withdraw Earnings', icon: '💰', bg: '#F0FDF4' },
+            {
+              label: 'Update Availability',
+              icon: '📅',
+              bg: '#EFF6FF',
+              onPress: () => navigation.navigate('ArtistAvailability'),
+            },
+            {
+              label: 'Edit Portfolio',
+              icon: '🖼️',
+              bg: '#F5F3FF',
+              onPress: () =>
+                navigation.navigate('ArtistOnboard', {
+                  editStep: ARTIST_STEP_INDEX.portfolio,
+                  lockStep: true,
+                  returnOnSave: true,
+                }),
+            },
+            {
+              label: 'View Bookings',
+              icon: '📅',
+              bg: '#FFFBEB',
+              onPress: () => navigation.navigate('Bookings'),
+            },
+            {
+              label: 'Withdraw Earnings',
+              icon: '💰',
+              bg: '#F0FDF4',
+              onPress: () =>
+                customToast(
+                  'Payouts are coming soon. Bank withdrawals will land with the payouts API.',
+                  'error',
+                ),
+            },
           ].map(action => (
             <TouchableOpacity
               key={action.label}
               style={[styles.actionCard, { backgroundColor: action.bg }]}
-              onPress={() =>
-                action.route ? navigation?.navigate(action.route) : null
-              }>
+              onPress={action.onPress}>
               <Text style={styles.actionIcon}>{action.icon}</Text>
               <Text style={styles.actionLabel}>{action.label}</Text>
             </TouchableOpacity>

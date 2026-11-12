@@ -23,6 +23,7 @@ import {
   validateCustomerOnboard,
   validateArtistOnboard,
 } from '../utils/validation';
+import { unregisterPushToken } from '../notifications/push';
 
 let currentSession = null;
 let pendingPhone = null;
@@ -358,6 +359,7 @@ export async function saveOnboardingProgress(step, data = {}) {
 }
 
 export async function logout() {
+  await unregisterPushToken();
   currentSession = null;
   pendingPhone = null;
   pendingRole = null;

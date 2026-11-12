@@ -27,10 +27,17 @@ import {
   loadPortfolioLimits,
 } from '../config/portfolioLimits';
 import {
+  ARTIST_FLOW_STEPS,
   ARTIST_STEP_BY_INDEX,
   artistProgressPayload,
   resumeArtistStepIndex,
+  screenForOnboardingStep,
+  isArtistFormStep,
 } from '../constants/onboarding';
+import { parseINRDigits } from '../utils/money';
+import MoneyInput from '../components/MoneyInput';
+import OnboardingProgressHeader from '../components/OnboardingProgressHeader';
+import { customToast } from '../utils/toast';
 
 const STEPS = [
   'Profile',
@@ -38,7 +45,6 @@ const STEPS = [
   'Experience',
   'Portfolio',
   'Pricing',
-  'Verify',
 ];
 
 const EXPERIENCE_OPTIONS = ['1–2 years', '3–5 years', '5–8 years', '8+ years'];
@@ -48,10 +54,11 @@ const EVENT_OPTIONS = ['Wedding', 'Reception', 'Sangeet', 'Corporate', 'Birthday
 export default function ArtistOnboardScreen({
   route,
   navigation,
-  onAuthenticated,
 }) {
   const draft = route.params?.draft || {};
-  const [step, setStep] = useState(route.params?.initialStep ?? 0);
+  const [step, setStep] = useState(
+    route.params?.editStep ?? route.params?.initialStep ?? 0,
+  );
   const [name, setName] = useState(draft.name || '');
   const [stageName, setStageName] = useState(draft.stageName || '');
   const [bio, setBio] = useState(draft.bio || '');
@@ -67,14 +74,16 @@ export default function ArtistOnboardScreen({
     draft.portfolioVideos || [],
   );
   const [priceType, setPriceType] = useState(draft.priceType || 'fixed');
-  const [price, setPrice] = useState(draft.price || '');
+  const [price, setPrice] = useState(parseINRDigits(draft.price || ''));
   const [travelAllowance, setTravelAllowance] = useState(
-    draft.travelAllowance || '',
+    parseINRDigits(draft.travelAllowance || ''),
   );
   const [trialSessionFee, setTrialSessionFee] = useState(
-    draft.trialSessionFee || '',
+    parseINRDigits(draft.trialSessionFee || ''),
   );
-  const [teamMemberFee, setTeamMemberFee] = useState(draft.teamMemberFee || '');
+  const [teamMemberFee, setTeamMemberFee] = useState(
+    parseINRDigits(draft.teamMemberFee || ''),
+  );
   const [idImage, setIdImage] = useState(draft.idImage || '');
   const [selfieImage, setSelfieImage] = useState(draft.selfieImage || '');
   const [videoInterview, setVideoInterview] = useState(
@@ -88,6 +97,10 @@ export default function ArtistOnboardScreen({
   const [hydrating, setHydrating] = useState(true);
   const [portfolioLimits, setPortfolioLimits] = useState(() =>
     getPortfolioLimits(),
+  );
+  const [locked, setLocked] = useState(Boolean(route.params?.lockStep));
+  const [returnOnSave, setReturnOnSave] = useState(
+    Boolean(route.params?.returnOnSave),
   );
   const valuesRef = useRef({});
 
@@ -106,16 +119,16 @@ export default function ArtistOnboardScreen({
     if (!skipPortfolio && Array.isArray(next.portfolioVideos)) {
       setPortfolioVideos(next.portfolioVideos);
     }
-    if (next.priceType) setPriceType(next.priceType);
-    if (next.price != null) setPrice(String(next.price));
+    setPriceType(next.priceType || 'fixed');
+    if (next.price != null) setPrice(parseINRDigits(next.price));
     if (next.travelAllowance != null) {
-      setTravelAllowance(String(next.travelAllowance));
+      setTravelAllowance(parseINRDigits(next.travelAllowance));
     }
     if (next.trialSessionFee != null) {
-      setTrialSessionFee(String(next.trialSessionFee));
+      setTrialSessionFee(parseINRDigits(next.trialSessionFee));
     }
     if (next.teamMemberFee != null) {
-      setTeamMemberFee(String(next.teamMemberFee));
+      setTeamMemberFee(parseINRDigits(next.teamMemberFee));
     }
     if (next.idImage) setIdImage(next.idImage);
     if (next.selfieImage) setSelfieImage(next.selfieImage);
@@ -128,7 +141,7 @@ export default function ArtistOnboardScreen({
   const persistDraft = async (overrides = {}, stepId) => {
     const form = { ...valuesRef.current, ...overrides };
     const id = stepId || ARTIST_STEP_BY_INDEX[form.step] || 'profile';
-    return saveOnboardingProgress(id, artistProgressPayload(form));
+    return saveOnboardingProgress(id, artistProgressPayload(form, id));
   };
 
   const goToStep = nextStep => {
@@ -148,14 +161,33 @@ export default function ArtistOnboardScreen({
         applyDraft(result.draft || {}, {
           skipPortfolio: Boolean(route.params?.imagedata),
         });
-        const apiStep = resumeArtistStepIndex(result.onboarding?.current_step);
-        const nextStep = route.params?.lockStep
-          ? route.params.editStep ?? apiStep
-          : apiStep;
+        const stayLocked = locked || Boolean(route.params?.lockStep);
+        const stayReturn =
+          returnOnSave || Boolean(route.params?.returnOnSave);
+        const currentStepId = result.onboarding?.current_step;
+        if (
+          !stayLocked &&
+          !stayReturn &&
+          currentStepId &&
+          !isArtistFormStep(currentStepId)
+        ) {
+          navigation.replace(
+            screenForOnboardingStep(currentStepId, 'artist'),
+            { role: 'artist' },
+          );
+          return;
+        }
+        const requestedStep = route.params?.editStep;
+        const apiStep = resumeArtistStepIndex(currentStepId, requestedStep);
+        const nextStep =
+          typeof requestedStep === 'number' ? requestedStep : apiStep;
+        setLocked(stayLocked);
+        setReturnOnSave(stayReturn);
         setStep(nextStep);
         navigation.setParams({
           editStep: nextStep,
-          lockStep: Boolean(route.params?.lockStep),
+          lockStep: stayLocked,
+          returnOnSave: stayReturn,
         });
       }
       setHydrating(false);
@@ -227,7 +259,10 @@ export default function ArtistOnboardScreen({
 
     (async () => {
       try {
-        const uploaded = await uploadDocumentApi(localUri, docType);
+        const uploaded = await uploadDocumentApi(localUri, docType, {
+          mimeType: imageData.mimeType,
+          fileName: imageData.fileName,
+        });
         const path = uploaded.path;
         rememberPreview(path, uploaded.fullUrl || localUri);
 
@@ -331,15 +366,21 @@ export default function ArtistOnboardScreen({
       return;
     }
 
-    if (step < STEPS.length - 1) {
+    if (returnOnSave || step < STEPS.length - 1) {
       setLoading(true);
       const saved = await saveOnboardingProgress(
         ARTIST_STEP_BY_INDEX[step],
-        artistProgressPayload(formState),
+        artistProgressPayload(formState, ARTIST_STEP_BY_INDEX[step]),
       );
       setLoading(false);
       if (!saved.success) {
         setError(saved.error);
+        return;
+      }
+      if (returnOnSave) {
+        customToast(`${STEPS[step]} updated`, 'success');
+        if (navigation.canGoBack()) navigation.goBack();
+        else navigation.navigate('Tabs');
         return;
       }
       goToStep(step + 1);
@@ -365,7 +406,11 @@ export default function ArtistOnboardScreen({
       return;
     }
 
-    onAuthenticated(result.session);
+    const me = await fetchOnboardingStatus();
+    const nextId = me.onboarding?.current_step || 'digilocker';
+    navigation.replace(screenForOnboardingStep(nextId, 'artist'), {
+      role: 'artist',
+    });
   };
 
   if (hydrating) {
@@ -384,26 +429,12 @@ export default function ArtistOnboardScreen({
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.progressWrap}>
-          <View style={styles.progressRow}>
-            {STEPS.map((label, index) => (
-              <View
-                key={label}
-                style={[
-                  styles.progressBar,
-                  index < step && styles.progressBarDone,
-                  index === step && styles.progressBarActive,
-                ]}
-              />
-            ))}
-          </View>
-          <View style={styles.stepMeta}>
-            <Text style={styles.stepLabel}>
-              Step {step + 1} of {STEPS.length}
-            </Text>
-            <Text style={styles.stepName}>{STEPS[step]}</Text>
-          </View>
-        </View>
+        {returnOnSave ? null : (
+          <OnboardingProgressHeader
+            steps={ARTIST_FLOW_STEPS}
+            currentIndex={step}
+          />
+        )}
 
         <ScrollView
           style={styles.flex}
@@ -562,10 +593,17 @@ export default function ArtistOnboardScreen({
                 )}
                 {portfolioVideos.map((path, index) => (
                   <View key={`video-${path}-${index}`} style={styles.portfolioTile}>
-                    <Image
-                      source={{ uri: previewOf(path) }}
-                      style={styles.portfolioImage}
-                    />
+                    {/\.(mp4|mov|m4v|webm)(\?|$)/i.test(String(path)) ||
+                    String(path).includes('portfolio-videos') ? (
+                      <View style={[styles.portfolioImage, styles.videoPoster]}>
+                        <Text style={styles.videoOverlayText}>▶</Text>
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: previewOf(path) }}
+                        style={styles.portfolioImage}
+                      />
+                    )}
                     <View style={styles.videoOverlay}>
                       <Text style={styles.videoOverlayText}>▶</Text>
                     </View>
@@ -635,15 +673,13 @@ export default function ArtistOnboardScreen({
                   </Text>
                   <View style={styles.basePriceRow}>
                     <Text style={styles.currency}>₹</Text>
-                    <TextInput
+                    <MoneyInput
                       value={price}
-                      onChangeText={text => {
-                        setPrice(text.replace(/[^0-9]/g, ''));
+                      onChangeDigits={digits => {
+                        setPrice(digits);
                         if (error) setError('');
                       }}
-                      placeholder="8000"
-                      placeholderTextColor="#D1D5DB"
-                      keyboardType="number-pad"
+                      placeholder="8,000"
                       style={styles.basePriceInput}
                       editable={!loading}
                     />
@@ -680,70 +716,15 @@ export default function ArtistOnboardScreen({
                       <Text style={styles.addonLabel}>{item.label}</Text>
                       <Text style={styles.addonHint}>{item.hint}</Text>
                     </View>
-                    <TextInput
+                    <MoneyInput
                       value={item.value}
-                      onChangeText={text =>
-                        item.setter(text.replace(/[^0-9]/g, ''))
-                      }
+                      onChangeDigits={item.setter}
+                      showRupee
                       placeholder="₹0"
-                      placeholderTextColor="#D1D5DB"
-                      keyboardType="number-pad"
                       style={styles.addonInput}
                       editable={!loading}
                     />
                   </View>
-                ))}
-              </View>
-            </>
-          )}
-
-          {step === 5 && (
-            <>
-              <Text style={styles.title}>Verification</Text>
-              <Text style={styles.subtitle}>
-                Get the Verified badge and build trust
-              </Text>
-              <VerificationItem
-                icon="🪪"
-                title="Government ID"
-                desc="Aadhaar / PAN / Passport"
-                tag="required"
-                uploaded={idImage.length > 0}
-                imageUri={previewOf(idImage, 'id')}
-                uploadTitle="Upload Government ID"
-                onUpload={() => handleCamera('id')}
-              />
-              <VerificationItem
-                icon="🤳"
-                title="Selfie Verification"
-                desc="Live selfie to match ID"
-                tag="required"
-                uploaded={selfieImage.length > 0}
-                imageUri={previewOf(selfieImage, 'photo')}
-                uploadTitle="Take Selfie"
-                onUpload={() => handleCamera('photo')}
-              />
-              <VerificationItem
-                icon="🎥"
-                title="Video Interview"
-                desc="2-min intro video call"
-                tag="optional"
-                uploaded={videoInterview.length > 0}
-                imageUri={previewOf(videoInterview, 'videoInterview')}
-                uploadTitle="Add Intro Video"
-                onUpload={() => handleCamera('videoInterview')}
-              />
-              <View style={styles.perksBox}>
-                <Text style={styles.perksTitle}>🎖 Verified Badge Perks</Text>
-                {[
-                  'Top of search results',
-                  '4× higher booking rate',
-                  'Blue verified badge',
-                  'Priority support',
-                ].map(perk => (
-                  <Text key={perk} style={styles.perkItem}>
-                    ✓ {perk}
-                  </Text>
                 ))}
               </View>
             </>
@@ -766,6 +747,11 @@ export default function ArtistOnboardScreen({
             style={styles.backButton}
             onPress={() => {
               setError('');
+              if (returnOnSave) {
+                if (navigation.canGoBack()) navigation.goBack();
+                else navigation.navigate('Tabs');
+                return;
+              }
               if (step > 0) {
                 goToStep(step - 1);
                 return;
@@ -786,7 +772,11 @@ export default function ArtistOnboardScreen({
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.continueButtonText}>
-                {step < STEPS.length - 1 ? 'Continue' : 'Submit for Review'}
+                {returnOnSave
+                  ? 'Save'
+                  : step < STEPS.length - 1
+                    ? 'Continue'
+                    : 'Continue to Aadhaar'}
               </Text>
             )}
           </TouchableOpacity>
@@ -823,60 +813,6 @@ function ChipGroup({ label, options, selected, onSelect, single = false }) {
   );
 }
 
-function VerificationItem({
-  icon,
-  title,
-  desc,
-  tag,
-  uploaded,
-  imageUri,
-  uploadTitle,
-  onUpload,
-}) {
-  return (
-    <View style={styles.verifyItem}>
-      <View style={styles.verifyIconBox}>
-        <Text style={styles.verifyIcon}>{icon}</Text>
-      </View>
-      <View style={styles.verifyContent}>
-        <View style={styles.verifyTitleRow}>
-          <Text style={styles.verifyTitle}>{title}</Text>
-          <View
-            style={[
-              styles.tag,
-              tag === 'required' ? styles.requiredTag : styles.optionalTag,
-            ]}>
-            <Text
-              style={[
-                styles.tagText,
-                tag === 'required'
-                  ? styles.requiredTagText
-                  : styles.optionalTagText,
-              ]}>
-              {tag}
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.verifyDesc}>{desc}</Text>
-        <UploadTile
-          value={imageUri}
-          title={uploadTitle}
-          subtitle="JPEG or PNG"
-          onPress={onUpload}
-          width="100%"
-          height={110}
-          style={styles.verifyUploadTile}
-        />
-      </View>
-      {uploaded ? (
-        <View style={styles.uploadDoneBadge}>
-          <Text style={styles.uploadDoneBadgeText}>Done</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -896,40 +832,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  progressWrap: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  progressBar: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E5E7EB',
-  },
-  progressBarDone: {
-    backgroundColor: '#6C63FF',
-  },
-  progressBarActive: {
-    backgroundColor: '#8B5CF6',
-  },
-  stepMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  stepLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  stepName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#6C63FF',
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -1109,6 +1011,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '600',
   },
+  videoPoster: {
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.25)',
@@ -1230,7 +1137,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   addonInput: {
-    width: 80,
+    width: 128,
     textAlign: 'right',
     fontSize: 14,
     fontWeight: '700',

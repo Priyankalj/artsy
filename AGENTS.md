@@ -17,7 +17,11 @@ User flows: phone OTP login → role (`artist` \| `user`) → onboarding → bro
 
 - Backend layers: `apis` → `controllers` → `models` (+ validations, middlewares).
 - Mobile API client: `ArtistBooking/src/api/` talking to `API_BASE_URL` (`ArtistBooking/src/config/api.js`).
-- Auth: JWT after OTP verify; OTP returned in response in DEV/UAT.
+- Auth: JWT after OTP verify; OTP is always `1234` and returned in the API response in DEV/UAT/LOCAL.
+- **DEV vs PROD (Floatr-style):**
+  - Backend: set `ENVIRONMENT` in gitignored `ArtistBackend/env.js` (`DEV` → mocks; `PROD` → live MSG91 / payments).
+  - Mobile: flip `environment` in `ArtistBooking/config.js` (`DEV` loads `config_dev.js`, `PROD` loads `config_prod.js`).
+  - DEV skips SMS/email, mocks Razorpay orders, auto-verifies artists, soft-mocks push when FCM is missing.
 - Local default: `USE_MEMORY_STORE: true` in `ArtistBackend/env.js` (no Postgres required).
 - Real DB: set `USE_MEMORY_STORE: false`, configure `DB_*`, apply `ArtistBackend/schema.sql`.
 - Never commit `ArtistBackend/env.js` — use `env.example.js`.
@@ -74,6 +78,25 @@ Backend has no automated test suite yet (`npm test` is a stub). Prefer lint + ma
 3. Prefer small, reviewable PRs; one concern per change.
 4. When changing API contracts, update mobile `src/api/` clients in the same change when possible.
 5. Role playbooks live in `.cursor/skills/` and `.cursor/agents/`.
+6. **Blast radius (required for every change):** before editing, search for every caller of that function, route, screen, native setting, or env flag. After editing, check those call sites still work — including the other platform (iOS vs Android), related screens, API clients, and config. Do not land a fix that only works in one place if it breaks another.
+7. **Toasts:** always `customToast(message, 'error'|'success')`. Host is a TOP overlay (`ToastHost` / Floatr `<Toasts position=TOP>`). Never render toast UI inside a screen or KeyboardAvoidingView — that shrinks the page and pins the toast to the bottom.
+
+## iOS Firebase (do not undo)
+
+RN Firebase 27 ships Firebase **only via Swift Package Manager**. Do **not** add `pod 'FirebaseCore'` / `pod 'Firebase/Messaging'` (or other Firebase CocoaPods). That copies `FirebaseCore.framework` twice and Xcode fails with **Multiple commands produce FirebaseCore.framework**.
+
+Older RCT pods (`react-native-splash-screen`, `RNNotifee`, etc.) cannot link as dynamic frameworks (`RCTRegisterModule` undefined). Keep those names in the Podfile `pre_install` static list. Do **not** make the whole Podfile static, and do **not** make `RNFB*` static. Android `SplashScreen.show` / JS `NativeSplashScreen.hide()` stay in place.
+
+`vision-camera-cropper` is Android-only (`ios: null` in `react-native.config.js`). VisionCamera 4 dropped `FrameProcessorPlugin.h`; compiling the cropper pod on iOS fails. Camera/selfie still use `react-native-vision-camera` on both platforms. iOS sets `$VCEnableFrameProcessors = false` because we only `takePhoto`; do not turn that back on without checking VisionCamera + JSI link.
+
+If Xcode says **Missing package product 'FirebaseCore'** (or FirebaseMessaging / GUL*), packages are not resolved yet — do **not** re-add CocoaPods Firebase. Quit Xcode, then:
+
+```bash
+cd ArtistBooking/ios
+xcodebuild -resolvePackageDependencies -workspace ArtistBooking.xcworkspace -scheme ArtistBooking
+```
+
+Reopen **ArtistBooking.xcworkspace** (not the `.xcodeproj`), Product → Clean Build Folder, Run.
 
 ## Cursor Cloud specific instructions
 

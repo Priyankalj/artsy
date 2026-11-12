@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { BADGE_STYLES } from '../data/mockData';
+import { formatINR } from '../utils/money';
 
 function Badge({ type }) {
   const badge = BADGE_STYLES[type] ?? {
@@ -26,7 +27,7 @@ function formatPrice(price, priceType) {
   if (priceType === 'quote') {
     return 'Request Quote';
   }
-  return `₹${price.toLocaleString('en-IN')}`;
+  return formatINR(price);
 }
 
 export default function ArtistCard({

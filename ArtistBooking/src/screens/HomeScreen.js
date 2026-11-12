@@ -58,6 +58,10 @@ export default function HomeScreen({ user, navigation }) {
     }
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   useFocusEffect(
     useCallback(() => {
       load();

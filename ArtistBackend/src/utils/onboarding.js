@@ -5,6 +5,8 @@ const CUSTOMER_STEPS = [
   { id: "name", label: "Your name", description: "Tell artists who you are" },
   { id: "interests", label: "Interests", description: "Categories you want to book" },
   { id: "location", label: "Location", description: "Where you host events" },
+  { id: "digilocker", label: "Aadhaar", description: "Verify with DigiLocker" },
+  { id: "selfie", label: "Selfie", description: "Match your photo with Aadhaar" },
 ];
 
 const ARTIST_STEPS = [
@@ -14,7 +16,9 @@ const ARTIST_STEPS = [
   { id: "experience", label: "Experience", description: "Years, languages and events" },
   { id: "portfolio", label: "Portfolio", description: "Photos and videos of your work" },
   { id: "pricing", label: "Pricing", description: "How you charge for bookings" },
-  { id: "verify", label: "Verification", description: "ID and selfie" },
+  { id: "digilocker", label: "Aadhaar", description: "Verify with DigiLocker" },
+  { id: "selfie", label: "Selfie", description: "Match your photo with Aadhaar" },
+  { id: "bank", label: "Bank", description: "Verify the account for payouts" },
 ];
 
 const CUSTOMER_STEP_IDS = CUSTOMER_STEPS.map((step) => step.id);
@@ -27,11 +31,34 @@ const asArray = (value) => (Array.isArray(value) ? value : []);
 
 const isRoleDone = (user) => user?.role === "artist" || user?.role === "user";
 
+const DIGILOCKER_DONE = new Set([
+  "digilocker_complete",
+  "face_matched",
+  "approved",
+  "approved_dev_mock",
+]);
+const SELFIE_DONE = new Set([
+  "face_matched",
+  "approved",
+  "approved_dev_mock",
+]);
+
+const isArtistBankDone = (artist) =>
+  Boolean(artist?.bank_verified) &&
+  hasText(artist?.bank_ifsc, 11) &&
+  hasText(artist?.bank_account_last4, 4);
+
 const isCustomerStepDone = (stepId, user, customer) => {
   if (stepId === "role") return isRoleDone(user);
   if (stepId === "name") return hasText(customer?.name || user?.name, 2);
   if (stepId === "interests") return asArray(customer?.interests).length > 0;
   if (stepId === "location") return hasText(customer?.location, 2);
+  if (stepId === "digilocker") {
+    return DIGILOCKER_DONE.has(String(user?.verification_status || ""));
+  }
+  if (stepId === "selfie") {
+    return SELFIE_DONE.has(String(user?.verification_status || ""));
+  }
   return false;
 };
 
@@ -56,12 +83,18 @@ const isArtistStepDone = (stepId, user, artist) => {
     );
   }
   if (stepId === "pricing") {
-    const priceType = artist?.price_type || "quote";
+    const priceType = artist?.price_type || "fixed";
     if (priceType === "quote") return true;
     return Number(artist?.price) > 0;
   }
-  if (stepId === "verify") {
-    return Boolean(artist?.id_image) && Boolean(artist?.selfie_image);
+  if (stepId === "digilocker") {
+    return DIGILOCKER_DONE.has(String(user?.verification_status || ""));
+  }
+  if (stepId === "selfie") {
+    return SELFIE_DONE.has(String(user?.verification_status || ""));
+  }
+  if (stepId === "bank") {
+    return isArtistBankDone(artist);
   }
   return false;
 };
@@ -72,7 +105,16 @@ const definitionsFor = (user) => {
   return [{ id: "role", label: "Choose your role", description: "Customer or artist" }];
 };
 
+const isFullyOnboarded = (user, artist) => {
+  if (!user?.is_onboarded) return false;
+  if (user?.role === "artist") return isArtistBankDone(artist);
+  return true;
+};
+
 const isStepDone = (stepId, user, customer, artist) => {
+  if (stepId === "bank") {
+    return isArtistBankDone(artist);
+  }
   if (user?.is_onboarded) return true;
   if (user?.role === "artist") return isArtistStepDone(stepId, user, artist);
   if (user?.role === "user") return isCustomerStepDone(stepId, user, customer);
@@ -103,15 +145,19 @@ const buildOnboarding = ({ user, customer = null, artist = null } = {}) => {
   const current =
     steps.find((step) => step.status === "pending")?.id || "complete";
 
+  const complete = isFullyOnboarded(user, artist);
   return {
-    is_onboarded: Boolean(user?.is_onboarded),
-    current_step: user?.is_onboarded ? "complete" : current,
+    is_onboarded: complete,
+    current_step: complete ? "complete" : current,
     steps,
   };
 };
 
 const screenForStep = (stepId, role) => {
   if (stepId === "role") return "RoleSelection";
+  if (stepId === "digilocker") return "DigilockerInstructions";
+  if (stepId === "selfie") return "VerifySelfie";
+  if (stepId === "bank") return "BankDetails";
   if (role === "artist") return "ArtistOnboard";
   if (role === "user") return "CustomerOnboard";
   return "RoleSelection";
@@ -124,13 +170,15 @@ const artistFormIndex = (stepId) => {
     experience: 2,
     portfolio: 3,
     pricing: 4,
-    verify: 5,
+    digilocker: 4,
+    selfie: 4,
+    bank: 4,
   };
   return map[stepId] ?? 0;
 };
 
 const customerFormIndex = (stepId) => {
-  const map = { name: 0, interests: 1, location: 2 };
+  const map = { name: 0, interests: 1, location: 2, digilocker: 2, selfie: 2 };
   return map[stepId] ?? 0;
 };
 
@@ -144,4 +192,6 @@ module.exports = {
   firstStepForRole,
   nextStepAfter,
   screenForStep,
+  isArtistBankDone,
+  isFullyOnboarded,
 };

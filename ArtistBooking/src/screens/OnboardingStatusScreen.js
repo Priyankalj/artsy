@@ -14,15 +14,17 @@ import { USER_ROLES } from '../constants/auth';
 import {
   ARTIST_STEP_INDEX,
   CUSTOMER_STEP_INDEX,
+  isArtistFormStep,
 } from '../constants/onboarding';
 import { colors } from '../theme/colors';
+import { Check } from 'lucide-react-native';
 
 export default function OnboardingStatusScreen({ navigation, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [user, setUser] = useState(null);
   const [onboarding, setOnboarding] = useState(null);
-  const [draft, setDraft] = useState({});
+  const [, setDraft] = useState({});
 
   const load = useCallback(async () => {
     setError('');
@@ -45,23 +47,38 @@ export default function OnboardingStatusScreen({ navigation, onLogout }) {
   );
 
   const openStep = (stepId, { lockStep = false } = {}) => {
+    const go = (name, params) => navigation.replace(name, params);
+
     if (stepId === 'role' || !user?.role) {
-      navigation.navigate('RoleSelection', { phone: user?.phone });
+      go('RoleSelection', { phone: user?.phone });
+      return;
+    }
+
+    if (stepId === 'digilocker') {
+      go('DigilockerInstructions', { role: user.role });
+      return;
+    }
+    if (stepId === 'selfie') {
+      go('VerifySelfie', { role: user.role });
+      return;
+    }
+    if (stepId === 'bank') {
+      go('BankDetails', { role: user.role });
       return;
     }
 
     if (user.role === USER_ROLES.ARTIST) {
-      navigation.navigate('ArtistOnboard', {
+      go('ArtistOnboard', {
         phone: user.phone,
-        editStep: ARTIST_STEP_INDEX[stepId],
+        editStep: isArtistFormStep(stepId) ? ARTIST_STEP_INDEX[stepId] : 0,
         lockStep,
       });
       return;
     }
 
-    navigation.navigate('CustomerOnboard', {
+    go('CustomerOnboard', {
       phone: user.phone,
-      editStep: CUSTOMER_STEP_INDEX[stepId],
+      editStep: CUSTOMER_STEP_INDEX[stepId] ?? 0,
       lockStep,
     });
   };
@@ -89,6 +106,9 @@ export default function OnboardingStatusScreen({ navigation, onLogout }) {
               const done = step.status === 'done';
               const isNext = firstPending?.id === step.id;
               const locked = !done && !isNext && index > 0 && steps[index - 1]?.status !== 'done';
+              const aadhaarDone = step.id === 'digilocker' && done;
+              const bankDone = step.id === 'bank' && done;
+              const canOpen = !locked && !aadhaarDone && !bankDone;
               return (
                 <TouchableOpacity
                   key={step.id}
@@ -98,8 +118,10 @@ export default function OnboardingStatusScreen({ navigation, onLogout }) {
                     isNext && styles.rowNext,
                     locked && styles.rowLocked,
                   ]}
-                  onPress={() => !locked && openStep(step.id, { lockStep: true })}
-                  disabled={locked}
+                  onPress={() =>
+                    canOpen && openStep(step.id, { lockStep: true })
+                  }
+                  disabled={!canOpen}
                   activeOpacity={0.85}>
                   <View
                     style={[
@@ -115,9 +137,15 @@ export default function OnboardingStatusScreen({ navigation, onLogout }) {
                       {done ? 'Completed' : step.description || 'Pending'}
                     </Text>
                   </View>
-                  <Text style={styles.rowCta}>
-                    {done ? 'Edit' : locked ? '' : 'Continue'}
-                  </Text>
+                  {aadhaarDone || bankDone ? (
+                    <View style={styles.doneCheck}>
+                      <Check size={16} color="#FFF" strokeWidth={3} />
+                    </View>
+                  ) : (
+                    <Text style={styles.rowCta}>
+                      {done ? 'Edit' : locked ? '' : 'Continue'}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -129,7 +157,7 @@ export default function OnboardingStatusScreen({ navigation, onLogout }) {
         {firstPending ? (
           <TouchableOpacity
             style={styles.primary}
-            onPress={() => openStep(firstPending.id)}>
+            onPress={() => openStep(firstPending.id, { lockStep: true })}>
             <Text style={styles.primaryText}>Continue onboarding</Text>
           </TouchableOpacity>
         ) : steps.length ? (
@@ -196,6 +224,14 @@ const styles = StyleSheet.create({
   badgeDone: { backgroundColor: '#6C63FF' },
   badgeNext: { backgroundColor: '#8B5CF6' },
   badgeText: { color: '#FFF', fontWeight: '800' },
+  doneCheck: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   rowBody: { flex: 1 },
   rowTitle: { fontSize: 15, fontWeight: '800', color: '#111827' },
   rowDesc: { marginTop: 2, fontSize: 12, color: '#6B7280' },

@@ -37,11 +37,14 @@ const onboardCustomer = asyncWrapper(async (req, res, next) => {
     customer = await createCustomerProfile(userId, payload);
   }
 
+  const kycDone = ["face_matched", "approved", "approved_dev_mock"].includes(
+    String(user.verification_status || "")
+  );
   const updatedUser = await updateUser(userId, {
     name: payload.name,
     role: "user",
-    is_onboarded: true,
-    onboarding_step: "complete",
+    is_onboarded: kycDone,
+    onboarding_step: kycDone ? "complete" : "digilocker",
   });
 
   return res.status(StatusCodes.OK).json({

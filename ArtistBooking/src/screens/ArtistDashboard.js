@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -45,6 +45,10 @@ export default function ArtistDashboard({ user, onLogout, navigation }) {
     }
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   useFocusEffect(
     useCallback(() => {
       load();
@@ -67,9 +71,6 @@ export default function ArtistDashboard({ user, onLogout, navigation }) {
             <Text style={styles.greeting}>Hello 👋</Text>
             <Text style={styles.name}>{user?.name ?? 'Artist'}</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
         </View>
 
         {loading ? (

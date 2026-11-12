@@ -6,12 +6,27 @@ import NativeSplashScreen from 'react-native-splash-screen';
 import { initializeApp } from './src/bootstrap/initializeApp';
 import AppNavigator from './Navigation';
 import ToastHost from './src/components/ToastHost';
+import BrandSplash from './src/components/BrandSplash';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+
+    const hideSplash = () => {
+      try {
+        NativeSplashScreen.hide();
+      } catch {
+        // native splash already gone
+      }
+    };
+
+    // Hand off to the JS launch splash so the entrance animation is visible.
+    // Native launch screens cannot animate and do not update on Fast Refresh.
+    hideSplash();
+
+    const splashTimeout = setTimeout(hideSplash, 2500);
 
     initializeApp()
       .then(() => {
@@ -25,22 +40,29 @@ export default function App() {
         }
       })
       .finally(() => {
-        NativeSplashScreen.hide();
+        clearTimeout(splashTimeout);
+        hideSplash();
       });
 
     return () => {
       isMounted = false;
+      clearTimeout(splashTimeout);
     };
   }, []);
 
   if (!isReady) {
-    return null;
+    return (
+      <SafeAreaProvider>
+        <BrandSplash />
+      </SafeAreaProvider>
+    );
   }
 
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
         <AppNavigator />
+        {/* Floatr: <Toasts /> sibling overlay — not inside the navigator */}
         <ToastHost />
       </View>
     </SafeAreaProvider>
@@ -52,4 +74,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-

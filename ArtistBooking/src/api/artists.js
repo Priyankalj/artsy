@@ -30,3 +30,27 @@ export async function fetchMyArtistProfileApi() {
 export async function fetchEarningsApi() {
   return apiRequest('/artists/earnings');
 }
+
+export async function updateAvailabilityApi(availability) {
+  return apiRequest('/artists/me/availability', {
+    method: 'PATCH',
+    body: { availability },
+  });
+}
+
+export async function saveBankAccountApi({
+  accountNumber,
+  confirmAccountNumber,
+  ifsc,
+  accountName,
+}) {
+  return apiRequest('/artists/me/bank', {
+    method: 'POST',
+    body: {
+      accountNumber,
+      confirmAccountNumber,
+      ifsc,
+      accountName,
+    },
+  });
+}

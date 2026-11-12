@@ -1,6 +1,7 @@
 /**
- * Floatr-style toast API: customToast(message, 'error' | 'success')
- * Host component registers the renderer from App.js.
+ * Floatr-style toast API: customToast(message, 'error' | 'success').
+ * Always rendered at the TOP via ToastHost overlay (ToastPosition.TOP).
+ * Do not put toast UI inside screens — that resizes the page.
  */
 
 let showToast = null;

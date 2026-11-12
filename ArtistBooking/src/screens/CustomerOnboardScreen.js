@@ -21,14 +21,18 @@ import {
   validateCustomerOnboard,
 } from '../utils/validation';
 import { colors } from '../theme/colors';
-import { CUSTOMER_STEP_BY_INDEX, resumeCustomerStepIndex } from '../constants/onboarding';
+import {
+  CUSTOMER_FLOW_STEPS,
+  CUSTOMER_STEP_BY_INDEX,
+  resumeCustomerStepIndex,
+} from '../constants/onboarding';
+import OnboardingProgressHeader from '../components/OnboardingProgressHeader';
 
 const STEPS = ['Name', 'Interests', 'Location'];
 
 export default function CustomerOnboardScreen({
   route,
   navigation,
-  onAuthenticated,
 }) {
   const draft = route.params?.draft || {};
   const [step, setStep] = useState(route.params?.initialStep ?? 0);
@@ -159,7 +163,7 @@ export default function CustomerOnboardScreen({
       return;
     }
 
-    onAuthenticated(result.session);
+    navigation.navigate('DigilockerInstructions', { role: 'user' });
   };
 
   if (hydrating) {
@@ -178,22 +182,10 @@ export default function CustomerOnboardScreen({
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.progressWrap}>
-          <View style={styles.progressRow}>
-            {STEPS.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.progressBar,
-                  index <= step && styles.progressBarActive,
-                ]}
-              />
-            ))}
-          </View>
-          <Text style={styles.stepLabel}>
-            Step {step + 1} of {STEPS.length} · {STEPS[step]}
-          </Text>
-        </View>
+        <OnboardingProgressHeader
+          steps={CUSTOMER_FLOW_STEPS}
+          currentIndex={step}
+        />
 
         <ScrollView
           style={styles.flex}
@@ -335,7 +327,7 @@ export default function CustomerOnboardScreen({
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.continueButtonText}>
-                {step < STEPS.length - 1 ? 'Continue' : 'Start Exploring 🎉'}
+                {step < STEPS.length - 1 ? 'Continue' : 'Continue to Aadhaar'}
               </Text>
             )}
           </TouchableOpacity>
@@ -364,28 +356,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  progressWrap: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  progressBar: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E5E7EB',
-  },
-  progressBarActive: {
-    backgroundColor: '#6C63FF',
-  },
-  stepLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 8,
   },
   scrollContent: {
     paddingHorizontal: 24,

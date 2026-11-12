@@ -23,14 +23,18 @@ import {
 import { validateOtp } from '../utils/validation';
 import { colors } from '../theme/colors';
 import { customToast } from '../utils/toast';
+import {
+  RESEND_OTP_SECONDS,
+  SHOW_OTP_ON_SCREEN,
+} from '../../config';
 
 const { width } = Dimensions.get('window');
 const OTP_INPUT_ACCESSORY_ID = 'otpInput';
-const DEFAULT_COOLDOWN = 30;
+const DEFAULT_COOLDOWN = RESEND_OTP_SECONDS || 30;
 
 export default function OtpScreen({ navigation, route, onAuthenticated }) {
   const phone = route.params?.phone ?? '';
-  const initialOtp = route.params?.otp ?? '';
+  const initialOtp = SHOW_OTP_ON_SCREEN ? route.params?.otp ?? '' : '';
   const initialCooldown =
     route.params?.retryAfterSeconds ?? DEFAULT_COOLDOWN;
 
@@ -128,7 +132,7 @@ export default function OtpScreen({ navigation, route, onAuthenticated }) {
       return;
     }
 
-    if (result.otp) {
+    if (SHOW_OTP_ON_SCREEN && result.otp) {
       setDemoOtp(result.otp);
     }
     setCooldown(result.retryAfterSeconds ?? DEFAULT_COOLDOWN);
@@ -161,7 +165,7 @@ export default function OtpScreen({ navigation, route, onAuthenticated }) {
               <Text style={styles.subtitle}>
                 We sent a code to +91 {phone || 'your number'}.
               </Text>
-              {demoOtp ? (
+              {SHOW_OTP_ON_SCREEN && demoOtp ? (
                 <Text style={styles.demoOtp}>
                   Your OTP is {demoOtp}.{'\n'}Type it below to continue.
                 </Text>

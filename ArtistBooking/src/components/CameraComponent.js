@@ -19,7 +19,6 @@ import {
   useCameraDevice,
   useCameraFormat,
 } from 'react-native-vision-camera';
-import {rotateImage} from 'vision-camera-cropper';
 
 import {CLOSE, GALLARY} from '../assets/images/svgs';
 import global from '../global';
@@ -52,6 +51,8 @@ function toFileUri(path) {
   return path.startsWith('file://') ? path : `file://${path}`;
 }
 
+const VIDEO_DOCTYPES = new Set(['portfolioVideo', 'videoInterview']);
+
 export default function CameraComponent({navigation, route}) {
   const {
     frompage: returnScreen = 'ArtistOnboard',
@@ -67,28 +68,45 @@ export default function CameraComponent({navigation, route}) {
   const [capturedImage, setCapturedImage] = useState(null);
   const [pressed, setPressed] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [first, setFirst] = useState(true);
   const [modalText, setModalText] = useState('');
 
   const isFront = camType === true;
+  const isVideoDoc = VIDEO_DOCTYPES.has(doctype);
   const cropRegion = useMemo(
     () => buildCropRegion(doctype, camType),
     [doctype, camType],
   );
 
-  const back = useCameraDevice('back');
+  // iPhone 16+ has several back cameras. The unspecified back device can
+  // preview fine while takePhoto writes a black JPEG (portfolio was ~RGB 3).
+  const backWide = useCameraDevice('back', {
+    physicalDevices: ['wide-angle-camera'],
+  });
+  const backAny = useCameraDevice('back');
   const front = useCameraDevice('front');
+  const back = backWide ?? backAny;
   const device = isFront ? front : back;
 
-  const format = useCameraFormat(device, [
+  const frontFormat = useCameraFormat(front, [
     {photoAspectRatio: 4 / 3},
     {photoResolution: {width: 1920, height: 1080}},
   ]);
+  const backFormat = useCameraFormat(back, [
+    {photoHdr: false},
+    {photoAspectRatio: 4 / 3},
+  ]);
+  const format = isFront ? frontFormat : backFormat;
 
   useEffect(() => {
     const timer = setTimeout(async () => {
-      const status = await Camera.requestCameraPermission();
-      setHasPermission(status === 'granted');
+      const cameraStatus = await Camera.requestCameraPermission();
+      if (isVideoDoc) {
+        await Camera.requestMicrophonePermission();
+      }
+      setHasPermission(cameraStatus === 'granted');
       setIsActive(true);
       setFirst(false);
     }, 300);
@@ -102,14 +120,20 @@ export default function CameraComponent({navigation, route}) {
       clearTimeout(timer);
       backHandler.remove();
     };
-  }, [navigation]);
+  }, [navigation, isVideoDoc]);
 
   const rotateTakenImage = async () => {
     if (!capturedImage?.base64) {
       return;
     }
 
-    const rotated = await rotateImage(capturedImage.base64, 90);
+    // iOS: vision-camera-cropper is not linked (VisionCamera 4 has no
+    // FrameProcessorPlugin.h). Android keeps the native rotate helper.
+    let rotated = capturedImage.base64;
+    if (Platform.OS === 'android') {
+      const {rotateImage} = require('vision-camera-cropper');
+      rotated = await rotateImage(capturedImage.base64, 90);
+    }
     setCapturedImage({
       ...capturedImage,
       uri: `data:image/jpeg;base64,${rotated}`,
@@ -118,7 +142,7 @@ export default function CameraComponent({navigation, route}) {
   };
 
   const capturePhoto = async () => {
-    if (isCapturing || !cameraRef.current) {
+    if (isCapturing || !cameraReady || !cameraRef.current) {
       return;
     }
 
@@ -132,6 +156,7 @@ export default function CameraComponent({navigation, route}) {
       setIsCapturing(true);
       const photo = await cameraRef.current.takePhoto({
         enableShutterSound: true,
+        flash: 'off',
       });
       const uri = toFileUri(photo.path);
 
@@ -139,11 +164,56 @@ export default function CameraComponent({navigation, route}) {
         uri,
         base64: null,
         size: 0,
+        isVideo: false,
       });
     } catch (error) {
       console.error('Failed to capture photo:', error);
     } finally {
       setIsCapturing(false);
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (!cameraReady || !cameraRef.current) {
+      return;
+    }
+
+    if (isRecording) {
+      try {
+        await cameraRef.current.stopRecording();
+      } catch (error) {
+        console.error('Failed to stop recording:', error);
+        setIsRecording(false);
+      }
+      return;
+    }
+
+    setModalText('Recording… tap again to stop');
+    setIsRecording(true);
+    try {
+      cameraRef.current.startRecording({
+        fileType: 'mp4',
+        flash: 'off',
+        onRecordingFinished: video => {
+          setIsRecording(false);
+          setModalText('Check your video before uploading');
+          setCapturedImage({
+            uri: toFileUri(video.path),
+            base64: null,
+            size: 0,
+            isVideo: true,
+            mimeType: 'video/mp4',
+            fileName: `portfolio-video-${Date.now()}.mp4`,
+          });
+        },
+        onRecordingError: error => {
+          setIsRecording(false);
+          console.error('Failed to record video:', error);
+        },
+      });
+    } catch (error) {
+      setIsRecording(false);
+      console.error('Failed to start recording:', error);
     }
   };
 
@@ -192,8 +262,13 @@ export default function CameraComponent({navigation, route}) {
             isActive={isActive}
             device={device}
             format={format}
-            photo
+            photo={!isVideoDoc}
+            video={isVideoDoc}
+            audio={isVideoDoc}
+            photoQualityBalance="quality"
             resizeMode="cover"
+            onInitialized={() => setCameraReady(true)}
+            onError={error => console.error('Camera error:', error)}
           />
           <Svg
             preserveAspectRatio={
@@ -226,14 +301,26 @@ export default function CameraComponent({navigation, route}) {
 
               try {
                 const result = await launchImageLibrary({
-                  mediaType: 'photo',
-                  includeBase64: true,
+                  mediaType: isVideoDoc ? 'video' : 'photo',
+                  includeBase64: !isVideoDoc,
                   selectionLimit: 1,
                   quality: 1,
                 });
 
                 const asset = result?.assets?.[0];
                 if (!asset?.uri) {
+                  return;
+                }
+
+                if (isVideoDoc) {
+                  returnImage({
+                    uri: asset.uri,
+                    base64: null,
+                    size: asset.fileSize ?? 0,
+                    isVideo: true,
+                    mimeType: asset.type || 'video/mp4',
+                    fileName: asset.fileName,
+                  });
                   return;
                 }
 
@@ -261,13 +348,22 @@ export default function CameraComponent({navigation, route}) {
               styles.captureOuter,
               pressed && {backgroundColor: global.color.offWhite50},
             ]}
-            disabled={isCapturing}
+            disabled={isCapturing || !cameraReady}
             onPressIn={() => setPressed(true)}
             onPressOut={() => {
               setPressed(false);
+              if (isVideoDoc) {
+                toggleRecording();
+                return;
+              }
               capturePhoto();
             }}>
-            <View style={styles.captureInner} />
+            <View
+              style={[
+                styles.captureInner,
+                isRecording && styles.captureInnerRecording,
+              ]}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -291,11 +387,16 @@ export default function CameraComponent({navigation, route}) {
         <View style={styles.modalContainer}>
           <View style={styles.modalSpacer} />
           <View style={styles.previewWrap}>
-            {capturedImage?.uri ? (
+            {capturedImage?.uri && !capturedImage?.isVideo ? (
               <Image
                 style={styles.previewImage}
                 source={{uri: capturedImage.uri}}
               />
+            ) : capturedImage?.isVideo ? (
+              <View style={styles.videoPreview}>
+                <Text style={styles.videoPreviewIcon}>▶</Text>
+                <Text style={styles.videoPreviewText}>Video ready</Text>
+              </View>
             ) : null}
           </View>
           <View style={styles.modalActions}>
@@ -308,7 +409,7 @@ export default function CameraComponent({navigation, route}) {
                 onPress={() => setCapturedImage(null)}>
                 <Text style={styles.modalButtonText}>Back</Text>
               </Pressable>
-              {capturedImage?.base64 ? (
+              {capturedImage?.base64 && !capturedImage?.isVideo ? (
                 <Pressable
                   style={[styles.modalButton, styles.modalButtonOutline]}
                   onPress={rotateTakenImage}>
@@ -326,6 +427,9 @@ export default function CameraComponent({navigation, route}) {
                     base64: capturedImage?.base64 ?? null,
                     uri: capturedImage?.uri,
                     size: capturedImage?.size ?? 0,
+                    isVideo: Boolean(capturedImage?.isVideo),
+                    mimeType: capturedImage?.mimeType,
+                    fileName: capturedImage?.fileName,
                   });
                 }}>
                 <Text style={styles.modalButtonText}>Upload</Text>
@@ -401,6 +505,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: global.color.propertyGrey,
     backgroundColor: global.color.transparent,
+  },
+  captureInnerRecording: {
+    borderRadius: normalizeHeight(8),
+    backgroundColor: global.color.jasperRed || '#E11D48',
+    borderColor: global.color.jasperRed || '#E11D48',
+  },
+  videoPreview: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111827',
+    borderRadius: 12,
+  },
+  videoPreviewIcon: {
+    color: '#FFF',
+    fontSize: 36,
+    marginBottom: 8,
+  },
+  videoPreviewText: {
+    color: '#FFF',
+    fontSize: 16,
   },
   modalContainer: {
     flex: 1,

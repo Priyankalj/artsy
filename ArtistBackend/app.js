@@ -18,6 +18,7 @@ const errorHandlerMiddleware = require("./src/middlewares/error-handler");
 const { checkDatabaseConnection, ensureSchema } = require("./src/models/db");
 const { seedMemoryStore } = require("./src/models/memoryStore");
 const { seedDatabase } = require("./src/models/seed");
+const { getFirebaseAdmin } = require("./src/services/firebase");
 
 const app = express();
 const server = http.createServer(app);
@@ -89,7 +90,7 @@ app.use(morgan("tiny"));
 
 app.use(
   fileUpload({
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 50 * 1024 * 1024 },
   })
 );
 
@@ -120,7 +121,13 @@ server.listen(port, async () => {
       console.error("❌ Database seed failed:", error.message);
     }
   }
-  console.log(`✅ Artist Backend started at PORT ${port}`);
+  getFirebaseAdmin();
+  const environment = String(env.ENVIRONMENT || "DEV").toUpperCase();
+  const mocksOn = environment !== "PROD" && env.FORCE_LIVE_INTEGRATIONS !== true;
+  console.log(
+    `✅ Artist Backend started at PORT ${port} · ENVIRONMENT=${environment}` +
+      (mocksOn ? " · mocks ON (OTP 1234, no live SMS/email/Razorpay)" : " · live vendors")
+  );
 });
 
 server.on("error", (error) => {

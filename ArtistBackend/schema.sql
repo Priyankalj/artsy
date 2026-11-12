@@ -12,6 +12,12 @@ CREATE TABLE IF NOT EXISTS users (
   otp_expiry    TIMESTAMPTZ,
   otp_requested_at TIMESTAMPTZ,
   otp_verify_attempts INTEGER DEFAULT 0,
+  device_token  TEXT,
+  device_platform VARCHAR(16),
+  verification_status VARCHAR(32) DEFAULT 'pending',
+  aadhaar_last4 VARCHAR(4),
+  aadhaar_name VARCHAR(150),
+  digilocker_transaction_id TEXT,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ
 );
@@ -39,7 +45,7 @@ CREATE TABLE IF NOT EXISTS artists (
   events          TEXT[] DEFAULT '{}',
   location        VARCHAR(100),
   price           NUMERIC(12,2) DEFAULT 0,
-  price_type      VARCHAR(20) DEFAULT 'quote',
+  price_type      VARCHAR(20) DEFAULT 'fixed',
   travel_allowance NUMERIC(12,2) DEFAULT 0,
   trial_session_fee NUMERIC(12,2) DEFAULT 0,
   team_member_fee NUMERIC(12,2) DEFAULT 0,
@@ -54,6 +60,13 @@ CREATE TABLE IF NOT EXISTS artists (
   selfie_image    TEXT,
   video_interview TEXT,
   verified        BOOLEAN DEFAULT FALSE,
+  availability    JSONB DEFAULT '{}'::jsonb,
+  bank_account_number TEXT,
+  bank_ifsc       VARCHAR(11),
+  bank_account_name VARCHAR(150),
+  bank_account_last4 VARCHAR(4),
+  bank_verified   BOOLEAN DEFAULT FALSE,
+  bank_verified_at TIMESTAMPTZ,
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ
 );
@@ -86,12 +99,19 @@ CREATE TABLE IF NOT EXISTS bookings (
   customer_user_id   INTEGER NOT NULL REFERENCES users(user_id),
   artist_id          INTEGER NOT NULL REFERENCES artists(artist_id),
   event_date         DATE NOT NULL,
+  event_time         VARCHAR(20),
+  duration_hours     INTEGER DEFAULT 4,
   event_type         VARCHAR(100),
   location           VARCHAR(100),
   notes              TEXT,
   status             VARCHAR(20) DEFAULT 'pending'
                      CHECK (status IN ('pending', 'confirmed', 'cancelled', 'completed')),
   amount             NUMERIC(12,2) DEFAULT 0,
+  client_name        VARCHAR(100),
+  payment_status     VARCHAR(20) DEFAULT 'pending',
+  razorpay_order_id  VARCHAR(64),
+  razorpay_payment_id VARCHAR(64),
+  payment_mock       BOOLEAN DEFAULT FALSE,
   created_at         TIMESTAMPTZ DEFAULT NOW(),
   updated_at         TIMESTAMPTZ
 );

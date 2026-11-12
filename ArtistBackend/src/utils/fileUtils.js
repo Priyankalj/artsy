@@ -38,7 +38,31 @@ const saveUploadedFile = (file, subfolder = "misc") =>
     });
   });
 
+const saveBase64File = (base64, subfolder = "misc", filename = "file.jpg") => {
+  const cleanFolder = String(subfolder || "misc")
+    .replace(/\.\./g, "")
+    .replace(/^\/+|\/+$/g, "");
+  const uploadRoot = path.join(__dirname, "../../uploads", cleanFolder);
+  ensureDir(uploadRoot);
+
+  const cleaned = String(base64 || "")
+    .replace(/^data:[^;]+;base64,/i, "")
+    .replace(/\s/g, "");
+  const buffer = Buffer.from(cleaned, "base64");
+  const safeName = `${Date.now()}-${String(filename).replace(/\s+/g, "_")}`;
+  const dest = path.join(uploadRoot, safeName);
+  fs.writeFileSync(dest, buffer);
+  const relativePath = `uploads/${cleanFolder}/${safeName}`.replace(/\\/g, "/");
+  return {
+    filename: safeName,
+    path: relativePath,
+    mimetype: "image/jpeg",
+    size: buffer.length,
+  };
+};
+
 module.exports = {
   ensureDir,
   saveUploadedFile,
+  saveBase64File,
 };

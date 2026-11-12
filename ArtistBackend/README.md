@@ -25,7 +25,7 @@ Copy `env.example.js` → `env.js` (already present for local DEV).
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| POST | `/auth/otp/request` | No | Send OTP (OTP returned in DEV/UAT) |
+| POST | `/auth/otp/request` | No | Send OTP via MSG91 when configured (OTP still returned in DEV/UAT) |
 | POST | `/auth/otp/verify` | No | Verify OTP → JWT |
 | POST | `/auth/role` | Yes | Select `artist` \| `user` |
 | GET | `/auth/me` | Yes | Current user + onboarding status |
@@ -37,10 +37,16 @@ Copy `env.example.js` → `env.js` (already present for local DEV).
 | GET | `/artists/:id` | No | Artist detail |
 | POST | `/artists/onboard` | Yes | Artist onboarding |
 | GET | `/artists/me` | Yes | My artist profile |
+| PATCH | `/artists/me/availability` | Yes | Weekly booking hours |
+| POST | `/artists/me/bank` | Yes | Verify artist payout bank account |
 | POST | `/bookings` | Yes | Create booking |
 | GET | `/bookings` | Yes | My bookings |
 | GET | `/bookings/:id` | Yes | Booking detail |
 | PATCH | `/bookings/:id/status` | Yes | Update status |
 | POST | `/uploads` | Yes | Upload file (`file` field) |
+| GET | `/kyc/status` | Yes | DigiLocker + selfie status |
+| POST | `/kyc/digilocker/init` | Yes | Start DigiLocker (DEV bypasses Gridlines) |
+| GET | `/kyc/digilocker/callback` | No | Gridlines redirect back |
+| POST | `/kyc/selfie` | Yes | Face-match selfie vs Aadhaar photo |
 
 OTP is a random 4-digit code stored on `users.otp` with `users.otp_expiry`. In DEV/UAT the code is returned in the request response so it can be typed in the app.

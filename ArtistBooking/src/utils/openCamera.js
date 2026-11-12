@@ -8,6 +8,11 @@ export function getCameraInstruction(doctype) {
       return 'Keep your ID inside the box';
     case 'sign':
       return 'Keep your signature inside the box';
+    case 'portfolio':
+      return 'Fill the frame with your work';
+    case 'portfolioVideo':
+    case 'videoInterview':
+      return 'Record a video, or pick one from your library';
     default:
       return 'Keep the document inside the box';
   }

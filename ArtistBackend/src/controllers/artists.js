@@ -10,6 +10,9 @@ const {
   getArtistByUserId,
   createArtistProfile,
   updateArtistProfile,
+  updateArtistAvailability,
+  updateArtistBank,
+  redactArtistBank,
 } = require("../models/artists");
 const { getArtistEarnings } = require("../models/bookings");
 const {
@@ -23,6 +26,8 @@ const {
   withAuthenticatedUrls,
   normalizeRelativePath,
 } = require("../utils/mediaUrls");
+const { verifyBankAccount } = require("../services/bank");
+const { isSelfieDone } = require("../models/kyc");
 
 const collectMediaPaths = (payload = {}) => {
   const paths = [
@@ -41,13 +46,13 @@ const collectMediaPaths = (payload = {}) => {
 
 const enrichArtistListItem = (artist, profilePath, req) => {
   const path = profilePath || artist.profile_photo;
-  return {
+  return redactArtistBank({
     ...artist,
     profile_photo: buildAuthenticatedFileUrl(path, req) || artist.profile_photo,
     // Keep list payload light — gallery is loaded on detail
     portfolio_photos: [],
     portfolio_videos: [],
-  };
+  });
 };
 
 const enrichArtistDetail = async (artist, req) => {
@@ -75,7 +80,7 @@ const enrichArtistDetail = async (artist, req) => {
     sort_order: doc.sort_order,
   }));
 
-  return {
+  return redactArtistBank({
     ...artist,
     profile_photo: buildAuthenticatedFileUrl(profilePath, req),
     portfolio_photos: withAuthenticatedUrls(portfolioPhotos, req),
@@ -93,7 +98,7 @@ const enrichArtistDetail = async (artist, req) => {
       req
     ),
     documents,
-  };
+  });
 };
 
 const fetchCategories = asyncWrapper(async (req, res) => {
@@ -247,11 +252,14 @@ const onboardArtist = asyncWrapper(async (req, res, next) => {
     collectMediaPaths(payload)
   );
 
+  const kycDone = ["face_matched", "approved", "approved_dev_mock"].includes(
+    String(user.verification_status || "")
+  );
   const updatedUser = await updateUser(userId, {
     name: payload.name,
     role: "artist",
-    is_onboarded: true,
-    onboarding_step: "complete",
+    is_onboarded: false,
+    onboarding_step: kycDone ? "bank" : "digilocker",
   });
 
   const enriched = await enrichArtistDetail(artist, req);
@@ -288,6 +296,54 @@ const getMyArtistProfile = asyncWrapper(async (req, res, next) => {
   });
 });
 
+const updateMyAvailability = asyncWrapper(async (req, res, next) => {
+  if (req.authuser.role !== "artist") {
+    return next(
+      new CustomError(
+        null,
+        "Availability is available for artists only",
+        StatusCodes.FORBIDDEN,
+        "Functional"
+      )
+    );
+  }
+
+  const userId = req.authuser.user_id;
+  const artist = await getArtistByUserId(userId);
+  if (!artist) {
+    return next(
+      new CustomError(
+        null,
+        lang.locale.VLD_ARTIST_NOT_FOUND,
+        StatusCodes.NOT_FOUND,
+        "Functional"
+      )
+    );
+  }
+
+  const updated = await updateArtistAvailability(
+    userId,
+    req.body.availability
+  );
+  if (!updated) {
+    return next(
+      new CustomError(
+        null,
+        lang.locale.VLD_ARTIST_NOT_FOUND,
+        StatusCodes.NOT_FOUND,
+        "Functional"
+      )
+    );
+  }
+  const enriched = await enrichArtistDetail(updated, req);
+
+  return res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Availability updated",
+    data: { artist: enriched },
+  });
+});
+
 const fetchEarnings = asyncWrapper(async (req, res, next) => {
   if (req.authuser.role !== "artist") {
     return next(
@@ -307,8 +363,96 @@ const fetchEarnings = asyncWrapper(async (req, res, next) => {
     success: true,
     message: "Earnings fetched successfully",
     data: {
-      artist,
+      artist: redactArtistBank(artist),
       earnings,
+    },
+  });
+});
+
+const saveMyBankAccount = asyncWrapper(async (req, res, next) => {
+  if (req.authuser.role !== "artist") {
+    return next(
+      new CustomError(
+        null,
+        "Bank details are available for artists only",
+        StatusCodes.FORBIDDEN,
+        "Functional"
+      )
+    );
+  }
+
+  const userId = req.authuser.user_id;
+  const [user, artist] = await Promise.all([
+    findUserById(userId),
+    getArtistByUserId(userId),
+  ]);
+  if (!user || !artist) {
+    return next(
+      new CustomError(
+        null,
+        lang.locale.VLD_ARTIST_NOT_FOUND,
+        StatusCodes.NOT_FOUND,
+        "Functional"
+      )
+    );
+  }
+
+  if (!isSelfieDone(user.verification_status)) {
+    return next(
+      new CustomError(
+        null,
+        "Verify your selfie before adding a bank account",
+        StatusCodes.BAD_REQUEST,
+        "validation"
+      )
+    );
+  }
+
+  const accountName = String(
+    req.body.accountName || user.aadhaar_name || artist.name || user.name || ""
+  ).trim();
+  const verified = await verifyBankAccount({
+    accountNumber: req.body.accountNumber,
+    ifsc: req.body.ifsc,
+    accountName,
+  });
+  if (!verified.verified) {
+    return next(
+      new CustomError(
+        null,
+        verified.message || "Could not verify this bank account",
+        StatusCodes.BAD_REQUEST,
+        "validation"
+      )
+    );
+  }
+
+  const bank = await updateArtistBank(userId, {
+    accountNumber: verified.accountNumber,
+    ifsc: verified.ifsc,
+    accountName,
+  });
+  const updatedUser = await updateUser(userId, {
+    is_onboarded: true,
+    onboarding_step: "complete",
+  });
+
+  return res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Bank account verified",
+    data: {
+      mock: Boolean(verified.mock),
+      user: {
+        user_id: updatedUser.user_id,
+        phone: updatedUser.phone,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        is_onboarded: true,
+        onboarding_step: "complete",
+        verification_status: updatedUser.verification_status,
+        aadhaar_name: updatedUser.aadhaar_name || null,
+      },
+      artist: bank,
     },
   });
 });
@@ -320,5 +464,7 @@ module.exports = {
   fetchArtistGallery,
   onboardArtist,
   getMyArtistProfile,
+  updateMyAvailability,
+  saveMyBankAccount,
   fetchEarnings,
 };

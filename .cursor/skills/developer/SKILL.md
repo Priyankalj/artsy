@@ -24,6 +24,7 @@ Ship working product changes in `ArtistBooking/` and/or `ArtistBackend/`. Prefer
 - OTP auth and onboarding status live in backend auth/users/artists — extend those rather than bypassing them.
 - Portfolio/upload rules come from env (`MIN_PORTFOLIO_*`, etc.) and upload APIs.
 - Match naming and style of neighboring files.
+- **Blast radius:** before changing code, find every place that uses it (screens, `src/api`, backend layers, iOS/Android native, env). After the change, verify those places still compile and behave. Example: extra Firebase CocoaPods + RN Firebase SPM both embed `FirebaseCore` and break the iOS device build — a Podfile “fix” must not reintroduce that, and must not leave JS `messaging()` imports crashing if native Firebase is removed.
 
 ## Out of scope
 

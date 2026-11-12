@@ -19,8 +19,8 @@ const {
   isOtpCooldownActive,
   getOtpCooldownRemainingSeconds,
   isOtpExpired,
+  getOtpCooldownSeconds,
   OTP_TTL_MINUTES,
-  OTP_COOLDOWN_SECONDS,
   OTP_MAX_VERIFY_ATTEMPTS,
 } = require("../services/otp");
 const {
@@ -48,14 +48,20 @@ const {
   buildOnboarding,
   firstStepForRole,
 } = require("../utils/onboarding");
+const { sendOtpSms } = require("../services/notify");
 
-const publicUser = (user) => ({
+const publicUser = (user, onboarding) => ({
   user_id: user.user_id,
   phone: user.phone,
   name: user.name,
   role: user.role,
-  is_onboarded: user.is_onboarded,
-  onboarding_step: user.onboarding_step,
+  is_onboarded: onboarding
+    ? Boolean(onboarding.is_onboarded)
+    : Boolean(user.is_onboarded),
+  onboarding_step: onboarding?.current_step || user.onboarding_step,
+  verification_status: user.verification_status || "pending",
+  aadhaar_name: user.aadhaar_name || null,
+  aadhaar_last4: user.aadhaar_last4 || null,
 });
 
 const mergeArtistMedia = (artist, docs = []) => {
@@ -186,8 +192,9 @@ const requestOtp = asyncWrapper(async (req, res, next) => {
 
   const existing = await getOtpRequestMeta(phone);
   const retryAfter = getOtpCooldownRemainingSeconds(existing?.otp_requested_at);
+  const cooldownSeconds = getOtpCooldownSeconds();
   if (retryAfter > 0 || isOtpCooldownActive(existing?.otp_requested_at)) {
-    const seconds = retryAfter || OTP_COOLDOWN_SECONDS;
+    const seconds = retryAfter || cooldownSeconds;
     return next(
       new CustomError(
         null,
@@ -203,7 +210,20 @@ const requestOtp = asyncWrapper(async (req, res, next) => {
   const otp = generateOtp();
   await saveUserOtp(phone, otp, OTP_TTL_MINUTES);
 
-  const data = { phone, retry_after_seconds: OTP_COOLDOWN_SECONDS };
+  try {
+    await sendOtpSms(phone, otp);
+  } catch (error) {
+    return next(
+      new CustomError(
+        error,
+        "Could not send OTP. Please try again.",
+        StatusCodes.BAD_GATEWAY,
+        "Functional"
+      )
+    );
+  }
+
+  const data = { phone, retry_after_seconds: cooldownSeconds };
   if (shouldRevealOtp()) {
     data.otp = otp;
   }
@@ -263,7 +283,7 @@ const verifyOtpCode = asyncWrapper(async (req, res, next) => {
     message: "OTP verified successfully",
     data: {
       token,
-      user: publicUser(context.user),
+      user: publicUser(context.user, context.onboarding),
       onboarding: context.onboarding,
       draft: context.draft,
     },
@@ -308,7 +328,10 @@ const selectRole = asyncWrapper(async (req, res, next) => {
   } else {
     const existing = await getArtistByUserId(userId);
     if (!existing) {
-      await createArtistProfile(userId, { name: user.name || "" });
+      await createArtistProfile(userId, {
+        name: user.name || "",
+        priceType: "fixed",
+      });
     }
   }
 
@@ -319,7 +342,10 @@ const selectRole = asyncWrapper(async (req, res, next) => {
     success: true,
     message: "Role selected successfully",
     data: {
-      user: publicUser(user),
+      user: publicUser(user, {
+        ...context.onboarding,
+        current_step: user.onboarding_step,
+      }),
       onboarding: {
         ...context.onboarding,
         current_step: user.onboarding_step,
@@ -346,7 +372,7 @@ const me = asyncWrapper(async (req, res, next) => {
     success: true,
     message: "User fetched successfully",
     data: {
-      user: publicUser(context.user),
+      user: publicUser(context.user, context.onboarding),
       onboarding: context.onboarding,
       draft: context.draft,
       customer: context.customer,
@@ -505,7 +531,10 @@ const saveOnboardingProgress = asyncWrapper(async (req, res, next) => {
     success: true,
     message: "Onboarding progress saved",
     data: {
-      user: publicUser(user),
+      user: publicUser(user, {
+        ...context.onboarding,
+        current_step: user.onboarding_step,
+      }),
       onboarding: {
         ...context.onboarding,
         current_step: user.onboarding_step,

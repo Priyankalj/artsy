@@ -59,6 +59,103 @@ const ensureSchema = async () => {
      SET onboarding_step = 'role'
      WHERE is_onboarded = FALSE AND role IS NULL AND COALESCE(onboarding_step, '') = ''`
   );
+  await pool.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS device_token TEXT`
+  );
+  await pool.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS device_platform VARCHAR(16)`
+  );
+  await pool.query(`DROP TABLE IF EXISTS device_tokens`);
+
+  await pool.query(
+    `ALTER TABLE bookings
+     ADD COLUMN IF NOT EXISTS event_time VARCHAR(20)`
+  );
+  await pool.query(
+    `ALTER TABLE bookings
+     ADD COLUMN IF NOT EXISTS duration_hours INTEGER DEFAULT 4`
+  );
+  await pool.query(
+    `ALTER TABLE bookings
+     ADD COLUMN IF NOT EXISTS client_name VARCHAR(100)`
+  );
+  await pool.query(
+    `ALTER TABLE bookings
+     ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'pending'`
+  );
+  await pool.query(
+    `ALTER TABLE bookings
+     ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(64)`
+  );
+  await pool.query(
+    `ALTER TABLE bookings
+     ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(64)`
+  );
+  await pool.query(
+    `ALTER TABLE bookings
+     ADD COLUMN IF NOT EXISTS payment_mock BOOLEAN DEFAULT FALSE`
+  );
+  await pool.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS verification_status VARCHAR(32) DEFAULT 'pending'`
+  );
+  await pool.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS aadhaar_last4 VARCHAR(4)`
+  );
+  await pool.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS aadhaar_name VARCHAR(150)`
+  );
+  await pool.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS digilocker_transaction_id TEXT`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ALTER COLUMN price_type SET DEFAULT 'fixed'`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ADD COLUMN IF NOT EXISTS availability JSONB DEFAULT '{}'::jsonb`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ADD COLUMN IF NOT EXISTS bank_account_number TEXT`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ADD COLUMN IF NOT EXISTS bank_ifsc VARCHAR(11)`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ADD COLUMN IF NOT EXISTS bank_account_name VARCHAR(150)`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ADD COLUMN IF NOT EXISTS bank_account_last4 VARCHAR(4)`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ADD COLUMN IF NOT EXISTS bank_verified BOOLEAN DEFAULT FALSE`
+  );
+  await pool.query(
+    `ALTER TABLE artists
+     ADD COLUMN IF NOT EXISTS bank_verified_at TIMESTAMPTZ`
+  );
+  // Role-select used to insert price_type='quote', which made Request Quote
+  // look selected and marked Pricing done before the artist visited it.
+  await pool.query(
+    `UPDATE artists a
+     SET price_type = 'fixed'
+     FROM users u
+     WHERE a.user_id = u.user_id
+       AND COALESCE(u.is_onboarded, FALSE) = FALSE
+       AND a.price_type = 'quote'
+       AND COALESCE(a.price, 0) = 0`
+  );
 };
 
 module.exports = {

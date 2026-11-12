@@ -8,11 +8,15 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
-end
+# RN Firebase 27 ships Firebase via SPM. Do not also add Firebase pods —
+# that copies FirebaseCore.framework twice and Xcode fails the device build.
+# Do not switch this to :static — SPM + static pods duplicate Firebase symbols.
+use_frameworks! :linkage => :dynamic
+
+# iOS camera only uses takePhoto (selfie / onboard). Frame processors need
+# JSI symbols that fail to link as a dynamic VisionCamera.framework, and
+# vision-camera-cropper is Android-only. Android VisionCamera is unchanged.
+$VCEnableFrameProcessors = false
 
 target 'ArtistBooking' do
   config = use_native_modules!
@@ -22,6 +26,30 @@ target 'ArtistBooking' do
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
+
+  # Firebase SPM requires dynamic frameworks. Older RCT pods still call
+  # RCTRegisterModule / RCTEventEmitter and fail to link those as their own
+  # dylib. Keep this list static only — never RNFB* / Firebase, never the
+  # whole Podfile. JS/Android call sites for splash + notifee stay unchanged.
+  pre_install do |installer|
+    static_rct_pods = %w[
+      react-native-splash-screen
+      RNNotifee
+      react-native-razorpay
+      RNVectorIcons
+      RNKeychain
+      BVLinearGradient
+      react-native-image-picker
+      VisionCamera
+    ]
+    installer.pod_targets.each do |pod|
+      next unless static_rct_pods.include?(pod.name)
+
+      def pod.build_type
+        Pod::BuildType.static_framework
+      end
+    end
+  end
 
   post_install do |installer|
     react_native_post_install(

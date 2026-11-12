@@ -11,5 +11,6 @@ Follow `.cursor/skills/developer/SKILL.md` and `AGENTS.md`.
 When invoked:
 1. Clarify the goal only if blockers are unknown; otherwise implement.
 2. Touch the minimum set of files; keep API + mobile clients in sync when contracts change.
-3. Lint/test what you can; note device-only verification gaps.
-4. Return a short summary: what changed, how to verify, open risks.
+3. Before editing, search callers of that code (screens, APIs, native iOS/Android, env). After editing, confirm those places still work — do not ship a local fix that breaks another target.
+4. Lint/test what you can; note device-only verification gaps.
+5. Return a short summary: what changed, how to verify, open risks.

@@ -7,6 +7,7 @@ const DOC_TYPES = {
   ID_IMAGE: "id_image",
   SELFIE: "selfie",
   VIDEO_INTERVIEW: "video_interview",
+  AADHAAR_PHOTO: "aadhaar_photo",
 };
 
 const createDocument = async ({
@@ -99,6 +100,17 @@ const linkUserDocumentsToArtist = async (userId, artistId, filePaths = []) => {
   return rows;
 };
 
+const getLatestDocumentForUser = async (userId, documentType) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM documents
+     WHERE user_id = $1 AND document_type = $2
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId, documentType]
+  );
+  return rows[0] || null;
+};
+
 const getLatestProfilePathsForArtists = async (artistIds) => {
   if (!artistIds?.length) return {};
 
@@ -124,5 +136,6 @@ module.exports = {
   listDocumentsForArtist,
   listDocumentsForUser,
   linkUserDocumentsToArtist,
+  getLatestDocumentForUser,
   getLatestProfilePathsForArtists,
 };

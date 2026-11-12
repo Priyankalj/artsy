@@ -16,11 +16,13 @@ const BOOKING_SELECT = `
 `;
 
 const createBooking = async (payload) => {
+  const paymentStatus = payload.payment_status || "pending";
   const { rows } = await pool.query(
     `INSERT INTO bookings (
        customer_user_id, artist_id, event_date, event_time, duration_hours,
-       event_type, location, notes, status, amount, client_name
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10)
+       event_type, location, notes, status, amount, client_name,
+       payment_status, razorpay_order_id, razorpay_payment_id, payment_mock
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, $13, $14)
      RETURNING *`,
     [
       payload.customer_user_id,
@@ -33,6 +35,10 @@ const createBooking = async (payload) => {
       payload.notes || "",
       payload.amount || 0,
       payload.client_name || null,
+      paymentStatus,
+      payload.razorpay_order_id || null,
+      payload.razorpay_payment_id || null,
+      payload.payment_mock === true,
     ]
   );
   return rows[0];

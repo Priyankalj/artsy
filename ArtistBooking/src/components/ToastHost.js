@@ -1,19 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Platform,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FullWindowOverlay } from 'react-native-screens';
 import { registerToastHandler } from '../utils/toast';
-import { colors } from '../theme/colors';
+import global from '../global';
 
 /**
- * Top toast host — same idea as Floatr's <Toasts />:
- * overlay sibling (not Modal), pointerEvents="box-none" so the app
- * stays fully interactive while the toast is visible.
+ * Floatr <Toasts /> pattern: overlay sibling, never in the navigator flex
+ * tree. iOS uses FullWindowOverlay so native-stack screens cannot push the
+ * toast into layout (that was shrinking the page and pinning it to the bottom).
  */
 export default function ToastHost() {
   const insets = useSafeAreaInsets();
@@ -81,53 +83,68 @@ export default function ToastHost() {
     };
   }, [show]);
 
-  if (!toast) {
-    return null;
-  }
+  const isError = toast?.type !== 'success';
 
-  const isError = toast.type !== 'success';
-
-  return (
+  const overlay = (
     <View
       pointerEvents="box-none"
       style={[
-        styles.overlay,
+        Platform.OS === 'ios' ? styles.hostIos : styles.hostAndroid,
         { paddingTop: Math.max(insets.top, 12) + 8 },
       ]}>
-      <Animated.View
-        pointerEvents="auto"
-        style={[
-          styles.toast,
-          {
-            opacity,
-            transform: [{ translateY }],
-          },
-        ]}>
-        <TouchableOpacity activeOpacity={0.9} onPress={hide}>
-          <Text
-            style={[
-              styles.text,
-              { color: isError ? colors.error : '#15803D' },
-            ]}>
-            {toast.message}
-          </Text>
-        </TouchableOpacity>
-      </Animated.View>
+      {toast ? (
+        <Animated.View
+          pointerEvents="auto"
+          style={[
+            styles.toast,
+            {
+              opacity,
+              transform: [{ translateY }],
+            },
+          ]}>
+          <TouchableOpacity activeOpacity={0.9} onPress={hide}>
+            <Text
+              style={[
+                styles.text,
+                {
+                  color: isError
+                    ? global.color.jasperRed
+                    : global.color.treeGreen,
+                },
+              ]}>
+              {toast.message}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      ) : null}
     </View>
   );
+
+  if (Platform.OS === 'ios') {
+    return <FullWindowOverlay>{overlay}</FullWindowOverlay>;
+  }
+
+  return overlay;
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 9999,
-    elevation: 9999,
-    justifyContent: 'flex-start',
+  hostIos: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  hostAndroid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 99999,
+    elevation: 99999,
     alignItems: 'center',
   },
   toast: {
-    maxWidth: '92%',
-    backgroundColor: colors.white,
+    width: '92%',
+    backgroundColor: global.color.white,
+    overflow: 'hidden',
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -138,8 +155,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   text: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: global.font.font_family_fs,
+    fontSize: global.fontsize.f16,
     textAlign: 'center',
     lineHeight: 22,
   },

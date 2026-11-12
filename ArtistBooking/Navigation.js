@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
+import BrandSplash from './src/components/BrandSplash';
 import WelcomeSplashScreen from './src/screens/WelcomeSplashScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import OtpScreen from './src/screens/OtpScreen';
@@ -11,6 +11,10 @@ import RoleSelectionScreen from './src/screens/RoleSelectionScreen';
 import CustomerOnboardScreen from './src/screens/CustomerOnboardScreen';
 import ArtistOnboardScreen from './src/screens/ArtistOnboardScreen';
 import OnboardingStatusScreen from './src/screens/OnboardingStatusScreen';
+import DigilockerInstructionsScreen from './src/screens/DigilockerInstructionsScreen';
+import VerifySelfieScreen from './src/screens/VerifySelfieScreen';
+import DigilockerCallbackScreen from './src/screens/DigilockerCallbackScreen';
+import BankDetailsScreen from './src/screens/BankDetailsScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import BookingsScreen from './src/screens/BookingsScreen';
@@ -19,11 +23,13 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ArtistDashboard from './src/screens/ArtistDashboard';
 import ArtistDetailScreen from './src/screens/ArtistDetailScreen';
 import CreateBookingScreen from './src/screens/CreateBookingScreen';
+import AvailabilityScreen from './src/screens/AvailabilityScreen';
 import BottomTabBar from './src/components/BottomTabBar';
 import CameraComponent from './src/components/CameraComponent';
 import CropImageComponent from './src/components/CropImageComponent';
 import { logout, restoreSession } from './src/auth/authService';
 import { USER_ROLES } from './src/constants/auth';
+import usePushNotifications from './src/notifications/usePushNotifications';
 
 const RootStack = createNativeStackNavigator();
 const AuthStackNav = createNativeStackNavigator();
@@ -108,22 +114,20 @@ function AuthStack({ onAuthenticated, onLogout, pendingOnboarding }) {
         )}
       </AuthStackNav.Screen>
       <AuthStackNav.Screen name="RoleSelection" component={RoleSelectionScreen} />
-      <AuthStackNav.Screen name="CustomerOnboard">
+      <AuthStackNav.Screen name="CustomerOnboard" component={CustomerOnboardScreen} />
+      <AuthStackNav.Screen name="ArtistOnboard" component={ArtistOnboardScreen} />
+      <AuthStackNav.Screen name="DigilockerInstructions" component={DigilockerInstructionsScreen} />
+      <AuthStackNav.Screen name="VerifySelfie">
         {props => (
-          <CustomerOnboardScreen
-            {...props}
-            onAuthenticated={onAuthenticated}
-          />
+          <VerifySelfieScreen {...props} onAuthenticated={onAuthenticated} />
         )}
       </AuthStackNav.Screen>
-      <AuthStackNav.Screen name="ArtistOnboard">
+      <AuthStackNav.Screen name="BankDetails">
         {props => (
-          <ArtistOnboardScreen
-            {...props}
-            onAuthenticated={onAuthenticated}
-          />
+          <BankDetailsScreen {...props} onAuthenticated={onAuthenticated} />
         )}
       </AuthStackNav.Screen>
+      <AuthStackNav.Screen name="DigilockerCallback" component={DigilockerCallbackScreen} />
       <AuthStackNav.Screen
         name="Camera"
         component={CameraComponent}
@@ -152,6 +156,11 @@ function AppStack({ session, onLogout, isArtist }) {
       </AppStackNav.Screen>
       <AppStackNav.Screen name="ArtistDetail" component={ArtistDetailScreen} />
       <AppStackNav.Screen name="CreateBooking" component={CreateBookingScreen} />
+      <AppStackNav.Screen name="ArtistOnboard" component={ArtistOnboardScreen} />
+      <AppStackNav.Screen
+        name="ArtistAvailability"
+        component={AvailabilityScreen}
+      />
       <AppStackNav.Screen
         name="Camera"
         component={CameraComponent}
@@ -167,8 +176,12 @@ function AppStack({ session, onLogout, isArtist }) {
 }
 
 export default function AppNavigator() {
+  const navigationRef = useRef(null);
   const [session, setSession] = useState(null);
   const [bootstrapping, setBootstrapping] = useState(true);
+  const isLoggedIn = Boolean(session?.token || session?.isAuthenticated);
+
+  usePushNotifications(navigationRef, isLoggedIn);
 
   useEffect(() => {
     let mounted = true;
@@ -201,18 +214,33 @@ export default function AppNavigator() {
   );
 
   if (bootstrapping) {
-    return (
-      <View style={styles.boot}>
-        <ActivityIndicator size="large" color="#6C63FF" />
-      </View>
-    );
+    return <BrandSplash />;
   }
 
+  const linking = {
+    prefixes: ['artsy://'],
+    config: {
+      screens: {
+        Auth: {
+          screens: {
+            DigilockerCallback: {
+              path: 'kyc/digilocker',
+              parse: {
+                status: value => value,
+                message: value => value,
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {isOnboarded ? (
-          <RootStack.Screen name="Main">
+          <RootStack.Screen name="App">
             {() => (
               <AppStack
                 session={session}
@@ -222,7 +250,7 @@ export default function AppNavigator() {
             )}
           </RootStack.Screen>
         ) : (
-          <RootStack.Screen name="Main">
+          <RootStack.Screen name="Auth">
             {() => (
               <AuthStack
                 onAuthenticated={handleAuthenticated}
@@ -236,12 +264,3 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  boot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FAFAFA',
-  },
-});

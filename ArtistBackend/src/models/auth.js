@@ -1,6 +1,6 @@
 const { pool } = require("./db");
 
-const USER_COLUMNS = `user_id, phone, name, role, is_onboarded, onboarding_step, created_at, updated_at`;
+const USER_COLUMNS = `user_id, phone, name, role, is_onboarded, onboarding_step, verification_status, aadhaar_last4, aadhaar_name, created_at, updated_at`;
 
 const findUserByPhone = async (phone) => {
   const { rows } = await pool.query(
@@ -37,7 +37,17 @@ const updateUser = async (userId, updates) => {
 
   for (const [key, value] of Object.entries(updates)) {
     if (
-      ["name", "role", "is_onboarded", "phone", "onboarding_step"].includes(key)
+      [
+        "name",
+        "role",
+        "is_onboarded",
+        "phone",
+        "onboarding_step",
+        "verification_status",
+        "aadhaar_last4",
+        "aadhaar_name",
+        "digilocker_transaction_id",
+      ].includes(key)
     ) {
       fields.push(`${key} = $${idx++}`);
       values.push(value);

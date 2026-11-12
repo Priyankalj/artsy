@@ -1,6 +1,6 @@
 import { getSession } from '../auth/authService'
 
-const MIN_SPLASH_MS = 600
+const MIN_SPLASH_MS = 1400
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))

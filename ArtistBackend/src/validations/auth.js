@@ -46,7 +46,9 @@ const onboardingProgressSchema = Joi.object({
       "experience",
       "portfolio",
       "pricing",
-      "verify"
+      "verify",
+      "digilocker",
+      "selfie"
     )
     .required(),
   data: Joi.object().unknown(true).default({}),

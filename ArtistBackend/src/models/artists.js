@@ -1,4 +1,21 @@
 const { pool } = require("./db");
+const { resolveInitialVerification } = require("../services/verification");
+
+const MAX_INR_AMOUNT = 999999999;
+
+const clampInr = (value, fallback = 0) => {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return fallback;
+  return Math.min(Math.trunc(amount), MAX_INR_AMOUNT);
+};
+
+const optionalClampInr = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  return clampInr(value, 0);
+};
 
 const getCategories = async () => {
   const { rows } = await pool.query(
@@ -97,6 +114,7 @@ const getArtistByUserId = async (userId) => {
 };
 
 const createArtistProfile = async (userId, payload) => {
+  const verification = resolveInitialVerification();
   const { rows } = await pool.query(
     `INSERT INTO artists (
        user_id, name, stage_name, bio, category, subcategory, experience,
@@ -111,7 +129,7 @@ const createArtistProfile = async (userId, payload) => {
        $13, $14, $15,
        $16, $17,
        $18, $19, $20, $21,
-       $22, TRUE
+       $22, $23
      )
      RETURNING *`,
     [
@@ -125,18 +143,19 @@ const createArtistProfile = async (userId, payload) => {
       payload.languages || [],
       payload.events || [],
       payload.location || "",
-      payload.price || 0,
-      payload.priceType || payload.price_type || "quote",
-      payload.travelAllowance || payload.travel_allowance || 0,
-      payload.trialSessionFee || payload.trial_session_fee || 0,
-      payload.teamMemberFee || payload.team_member_fee || 0,
+      clampInr(payload.price, 0),
+      payload.priceType || payload.price_type || "fixed",
+      clampInr(payload.travelAllowance ?? payload.travel_allowance, 0),
+      clampInr(payload.trialSessionFee ?? payload.trial_session_fee, 0),
+      clampInr(payload.teamMemberFee ?? payload.team_member_fee, 0),
       payload.portfolioPhotos || payload.portfolio_photos || [],
       payload.portfolioVideos || payload.portfolio_videos || [],
       payload.profilePhoto || payload.profile_photo || null,
       payload.idImage || payload.id_image || null,
       payload.selfieImage || payload.selfie_image || null,
       payload.videoInterview || payload.video_interview || null,
-      ["verified"],
+      verification.badges,
+      verification.verified,
     ]
   );
   return rows[0];
@@ -180,15 +199,64 @@ const updateArtistProfile = async (userId, payload) => {
       payload.idImage ?? payload.id_image ?? null,
       payload.selfieImage ?? payload.selfie_image ?? null,
       payload.location ?? null,
-      payload.price ?? null,
+      optionalClampInr(payload.price),
       payload.priceType ?? payload.price_type ?? null,
-      payload.travelAllowance ?? payload.travel_allowance ?? null,
-      payload.trialSessionFee ?? payload.trial_session_fee ?? null,
-      payload.teamMemberFee ?? payload.team_member_fee ?? null,
+      optionalClampInr(
+        payload.travelAllowance ?? payload.travel_allowance
+      ),
+      optionalClampInr(
+        payload.trialSessionFee ?? payload.trial_session_fee
+      ),
+      optionalClampInr(payload.teamMemberFee ?? payload.team_member_fee),
       payload.portfolioPhotos ?? payload.portfolio_photos ?? null,
       payload.portfolioVideos ?? payload.portfolio_videos ?? null,
       payload.videoInterview ?? payload.video_interview ?? null,
     ]
+  );
+  return rows[0] || null;
+};
+
+const updateArtistBank = async (userId, payload) => {
+  const accountNumber = String(payload.accountNumber || "");
+  const last4 = accountNumber.slice(-4);
+  const { rows } = await pool.query(
+    `UPDATE artists
+     SET bank_account_number = $2,
+         bank_ifsc = $3,
+         bank_account_name = $4,
+         bank_account_last4 = $5,
+         bank_verified = TRUE,
+         bank_verified_at = NOW(),
+         updated_at = NOW()
+     WHERE user_id = $1
+     RETURNING artist_id, user_id, bank_ifsc, bank_account_name,
+               bank_account_last4, bank_verified, bank_verified_at`,
+    [
+      userId,
+      accountNumber,
+      payload.ifsc,
+      payload.accountName || "",
+      last4,
+    ]
+  );
+  return rows[0] || null;
+};
+
+const redactArtistBank = (artist) => {
+  if (!artist) return artist;
+  const next = { ...artist };
+  delete next.bank_account_number;
+  return next;
+};
+
+const updateArtistAvailability = async (userId, availability) => {
+  const { rows } = await pool.query(
+    `UPDATE artists
+     SET availability = $2::jsonb,
+         updated_at = NOW()
+     WHERE user_id = $1
+     RETURNING *`,
+    [userId, JSON.stringify(availability || {})]
   );
   return rows[0] || null;
 };
@@ -200,4 +268,7 @@ module.exports = {
   getArtistByUserId,
   createArtistProfile,
   updateArtistProfile,
+  updateArtistAvailability,
+  updateArtistBank,
+  redactArtistBank,
 };

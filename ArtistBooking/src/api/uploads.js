@@ -11,7 +11,7 @@ const DOC_TYPE_MAP = {
   videoInterview: 'video_interview',
 };
 
-const UPLOAD_TIMEOUT_MS = 20000;
+const UPLOAD_TIMEOUT_MS = 60000;
 
 function withTimeout(promise, ms, message) {
   return Promise.race([
@@ -51,14 +51,20 @@ export async function uploadDocumentApi(localUri, doctype, options = {}) {
     throw new Error('No image selected to upload.');
   }
 
+  const isVideo =
+    docType === 'portfolio_video' ||
+    docType === 'video_interview' ||
+    String(options.mimeType || '').includes('video') ||
+    guessMime(localUri, 'image/jpeg').includes('video');
+
   const name =
     options.fileName ||
-    `${docType}-${Date.now()}.${guessMime(localUri).includes('video') ? 'mp4' : 'jpg'}`;
+    `${docType}-${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
 
   const formData = new FormData();
   formData.append('file', {
     uri: localUri,
-    type: options.mimeType || guessMime(localUri),
+    type: options.mimeType || (isVideo ? 'video/mp4' : guessMime(localUri)),
     name,
   });
   formData.append('doc_type', docType);

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "510370324335",
+    "project_id": "artsy-b770a",
+    "storage_bucket": "artsy-b770a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:510370324335:android:ec42bd0192c97cbff7129a",
+        "android_client_info": {
+          "package_name": "com.artistbooking"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5N_tIptIKV-VqDqtHC5I0oBaq-wI3kCo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

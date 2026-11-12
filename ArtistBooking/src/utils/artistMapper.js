@@ -32,7 +32,4 @@ export function mapArtistForUi(artist) {
   };
 }
 
-export function formatINR(amount) {
-  const value = Number(amount) || 0;
-  return `₹${value.toLocaleString('en-IN')}`;
-}
+export { formatINR, formatINRInput, parseINRDigits, toMoneyNumber } from './money';

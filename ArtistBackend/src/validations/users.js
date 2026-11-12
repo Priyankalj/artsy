@@ -57,7 +57,18 @@ const customerOnboardSchema = Joi.object({
     }),
 });
 
+const deviceTokenSchema = Joi.object({
+  token: Joi.string().trim().min(10).max(4096).required(),
+  platform: Joi.string().valid("ios", "android").required(),
+});
+
+const deviceTokenDeleteSchema = Joi.object({
+  token: Joi.string().trim().min(10).max(4096).optional(),
+});
+
 module.exports = {
   customerOnboardSchema,
+  deviceTokenSchema,
+  deviceTokenDeleteSchema,
   ALLOWED_INTERESTS,
 };

@@ -20,6 +20,8 @@ const folderForDocType = (userId, docType) => {
       return `artists/${userId}/id`;
     case DOC_TYPES.SELFIE:
       return `artists/${userId}/selfie`;
+    case DOC_TYPES.AADHAAR_PHOTO:
+      return `kyc/${userId}/aadhaar`;
     case DOC_TYPES.VIDEO_INTERVIEW:
       return `artists/${userId}/interview`;
     default:

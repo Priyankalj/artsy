@@ -1,6 +1,7 @@
 import { CATEGORIES } from '../data/mockData';
 import { USER_ROLES } from '../constants/auth';
 import { getPortfolioLimits } from '../config/portfolioLimits';
+import { toMoneyNumber } from './money';
 
 export const ALLOWED_INTERESTS = CATEGORIES.map(category => category.id);
 
@@ -154,12 +155,6 @@ export const EVENT_OPTIONS = [
   'Birthday',
 ];
 
-function toMoneyNumber(value) {
-  if (value === '' || value === null || value === undefined) return 0;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : NaN;
-}
-
 export function validateArtistStep(step, form) {
   if (step === 0) {
     const nameResult = validateCustomerName(form.name);
@@ -234,21 +229,11 @@ export function validateArtistStep(step, form) {
     return { valid: true };
   }
 
-  if (step === 5) {
-    if (!form.idImage) {
-      return { valid: false, error: 'Government ID is required.' };
-    }
-    if (!form.selfieImage) {
-      return { valid: false, error: 'Selfie verification is required.' };
-    }
-    return { valid: true };
-  }
-
   return { valid: false, error: 'Invalid step.' };
 }
 
 export function validateArtistOnboard(form) {
-  for (let step = 0; step <= 5; step += 1) {
+  for (let step = 0; step <= 4; step += 1) {
     const result = validateArtistStep(step, form);
     if (!result.valid) return result;
   }
@@ -270,8 +255,8 @@ export function validateArtistOnboard(form) {
       travelAllowance: toMoneyNumber(form.travelAllowance),
       trialSessionFee: toMoneyNumber(form.trialSessionFee),
       teamMemberFee: toMoneyNumber(form.teamMemberFee),
-      idImage: form.idImage,
-      selfieImage: form.selfieImage,
+      idImage: form.idImage || null,
+      selfieImage: form.selfieImage || null,
     },
   };
 }

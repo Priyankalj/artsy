@@ -11,8 +11,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createBookingApi } from '../api/bookings';
+import { collectBookingPayment } from '../payments/razorpayCheckout';
 import { formatINR } from '../utils/artistMapper';
 import { colors } from '../theme/colors';
+import { MOCK_PAYMENTS } from '../../config';
 
 const TIMES = ['8:00 AM', '10:00 AM', '12:00 PM', '2:00 PM', '4:00 PM', '6:00 PM'];
 const EVENT_TYPES = ['Wedding', 'Reception', 'Sangeet', 'Corporate', 'Birthday'];
@@ -59,6 +61,13 @@ export default function CreateBookingScreen({ route, navigation }) {
     setLoading(true);
     setError('');
     try {
+      const payment = await collectBookingPayment({
+        amount: total,
+        artistId: Number(artistId),
+        artistName: artist?.name,
+        description: `${eventType} booking`,
+      });
+
       const eventDate = dates[selDate].toISOString().slice(0, 10);
       const result = await createBookingApi({
         artist_id: Number(artistId),
@@ -68,12 +77,22 @@ export default function CreateBookingScreen({ route, navigation }) {
         event_type: eventType,
         location: location.trim(),
         notes: notes.trim(),
-        amount: total,
+        amount: payment.amount_inr ?? total,
+        payment_status: 'paid',
+        razorpay_order_id: payment.order_id,
+        razorpay_payment_id: payment.payment_id,
+        payment_mock: payment.mock === true,
       });
       setSuccess(result?.data?.booking);
       setStep(3);
     } catch (err) {
-      setError(err.message);
+      // User closed Checkout — Razorpay rejects with code 0 / 2
+      const code = err?.code;
+      if (code === 0 || code === 2 || /cancelled|canceled/i.test(err?.description || '')) {
+        setError('Payment cancelled');
+      } else {
+        setError(err?.description || err?.message || 'Payment failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -245,6 +264,11 @@ export default function CreateBookingScreen({ route, navigation }) {
             <Row label="Base" value={formatINR(base)} />
             <Row label="Platform fee" value={formatINR(fee)} />
             <Row label="Total" value={formatINR(total)} bold />
+            {MOCK_PAYMENTS ? (
+              <Text style={styles.mockPayHint}>
+                DEV: payment is simulated — no Razorpay charge.
+              </Text>
+            ) : null}
           </View>
         )}
 
@@ -254,6 +278,10 @@ export default function CreateBookingScreen({ route, navigation }) {
             <Text style={styles.successTitle}>Booking requested!</Text>
             <Text style={styles.successSub}>
               #{success.booking_id} · {success.status}
+              {success.payment_status
+                ? ` · pay ${success.payment_status}`
+                : ''}
+              {success.payment_mock ? ' (mock)' : ''}
             </Text>
             <TouchableOpacity
               style={styles.cta}
@@ -430,6 +458,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F3F4F6',
     padding: 16,
+  },
+  mockPayHint: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
   },
   row: {
     flexDirection: 'row',

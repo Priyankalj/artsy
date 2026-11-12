@@ -8,8 +8,12 @@ const createBookingSchema = Joi.object({
   event_type: Joi.string().allow("").max(100),
   location: Joi.string().allow("").max(100),
   notes: Joi.string().allow("").max(1000),
-  amount: Joi.number().min(0),
+  amount: Joi.number().min(0).max(999999999),
   client_name: Joi.string().allow("", null).max(100),
+  payment_status: Joi.string().valid("pending", "paid", "failed").optional(),
+  razorpay_order_id: Joi.string().allow("", null).max(64),
+  razorpay_payment_id: Joi.string().allow("", null).max(64),
+  payment_mock: Joi.boolean().optional(),
 });
 
 const updateBookingStatusSchema = Joi.object({
